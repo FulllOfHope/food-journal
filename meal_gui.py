@@ -54,14 +54,14 @@ class MealCard(tk.Frame):
     """One entry on the paper inside a hand-ruled border: eyebrow, rubber
     stamp, ruled meta. Eaten entries rule the border in ink."""
 
-    def __init__(self, master, app, meal, seed=1):
+    def __init__(self, master, app, meal):
         super().__init__(master, bg=th.PAPER, bd=0, highlightthickness=0)
         self.app = app
         self.meal = meal
         self.date = mc.today()
         self._enabled = True
 
-        self.backing = th.SketchBorder(self, seed=seed, bg=th.PAPER)
+        self.backing = th.CornerTicks(self, bg=th.PAPER)
         self.backing.place(x=0, y=0, relwidth=1.0, relheight=1.0)
         self.body = tk.Frame(self, bg=th.PAPER, bd=0, highlightthickness=0)
         self.body.pack(fill="both", expand=True, padx=13, pady=13)
@@ -189,7 +189,7 @@ class CardRow(tk.Frame):
         self.cards = {}
         for i, meal in enumerate(mc.MEALS):
             self.columnconfigure(i, weight=1, uniform="card")
-            card = MealCard(self, app, meal, seed=11 * (i + 1) + 3)
+            card = MealCard(self, app, meal)
             card.grid(row=0, column=i, sticky="nsew",
                       padx=(0, 16) if i < 2 else 0)
             self.cards[meal] = card
@@ -360,6 +360,8 @@ class MealApp(tk.Tk):
 
         self.ephemera = th.Ephemera(parent)
         self.ephemera.pack(fill="x", pady=(28, 0))
+        self.grove = th.Grove(parent)
+        self.grove.pack(fill="both", expand=True, pady=(8, 0))
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -511,6 +513,8 @@ class MealApp(tk.Tk):
         self.ins_chart_note = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
                                        font=th.mono(10))
         self.ins_chart_note.pack(anchor="w", pady=(8, 0))
+        th.Grove(body, mode="sprig", height=110).pack(fill="x",
+                                                     pady=(20, 0))
 
     # ---------------------------------------------------------- refresh
     def refresh_all(self):
@@ -583,7 +587,7 @@ class MealApp(tk.Tk):
         self.today_sum.configure(
             text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
                  f"{rupees(today_bill)}")
-        self.ephemera.set_folio(
+        self.grove.set_folio(
             f"{(now - mc.cycle_start(now)).days + 1:02d}")
 
     def refresh_log(self):

@@ -608,24 +608,23 @@ class Seal(tk.Canvas):
                          s * 0.70, s * 0.34, fill=STAMP, width=2)
 
 
-# ------------------------------------------------------- sketch border
-class SketchBorder(tk.Canvas):
-    """A hand-ruled double border that never looks stamped out: jittered
-    segments from a fixed seed, so it stays put across redraws. Eaten
-    entries rule it in ink, pending ones in pencil."""
+# ------------------------------------------------------- corner ticks
+class CornerTicks(tk.Canvas):
+    """Crop-mark corners instead of a box: four short ink rules that bound
+    an entry without boxing it. Eaten entries tick in ink."""
 
-    def __init__(self, master, seed=1, bg=PAPER, **kw):
+    def __init__(self, master, arm=26, bg=PAPER, **kw):
         super().__init__(master, bg=bg, highlightthickness=0, bd=0, **kw)
-        self._seed = seed
         self._ink = RULE_DK
-        self.bind("<Configure>", lambda e: self.sketch())
+        self._arm = arm
+        self.bind("<Configure>", lambda e: self.draw())
 
     def set_ink(self, color):
         if color != self._ink:
             self._ink = color
-            self.sketch()
+            self.draw()
 
-    def sketch(self):
+    def draw(self):
         self.delete("all")
         try:
             w, h = self.winfo_width(), self.winfo_height()
@@ -633,53 +632,24 @@ class SketchBorder(tk.Canvas):
             return
         if w < 30 or h < 30:
             return
-        rng = random.Random(self._seed)
-        light = lerp_hex(self._ink, PAPER, 0.45)
-        for inset, wd, col in ((6, 1.5, self._ink), (11, 1, light)):
-            pts = []
-            x = float(inset)
-            while x < w - inset:
-                pts.append((x, inset + rng.uniform(-1.5, 1.5)))
-                x += 26
-            pts.append((w - inset, inset + rng.uniform(-1.5, 1.5)))
-            y = float(inset)
-            while y < h - inset:
-                pts.append((w - inset + rng.uniform(-1.5, 1.5), y))
-                y += 26
-            pts.append((w - inset + rng.uniform(-1.5, 1.5), h - inset))
-            x = float(w - inset)
-            while x > inset:
-                pts.append((x, h - inset + rng.uniform(-1.5, 1.5)))
-                x -= 26
-            pts.append((inset, h - inset + rng.uniform(-1.5, 1.5)))
-            y = float(h - inset)
-            while y > inset:
-                pts.append((inset + rng.uniform(-1.5, 1.5), y))
-                y -= 26
-            pts.append(pts[0])
-            flat = [c for p in pts for c in p]
-            self.create_line(*flat, fill=col, width=wd)
+        m, a, c = 5, self._arm, self._ink
+        for x0, y0, dx, dy in ((m, m, 1, 1), (w - m, m, -1, 1),
+                               (m, h - m, 1, -1), (w - m, h - m, -1, -1)):
+            self.create_line(x0, y0, x0 + dx * a, y0, fill=c, width=2)
+            self.create_line(x0, y0, x0, y0 + dy * a, fill=c, width=2)
 
 
 # ------------------------------------------------------- ephemera
 class Ephemera(tk.Canvas):
-    """Margin furniture for empty stretches: a giant watermark folio, an
-    asterism divider with hairlines and a bold coffee ring."""
+    """Margin furniture: an asterism divider with hairlines, a bold
+    coffee ring and a stamped shakahari mark."""
 
     RING = "#a9885f"
-    WASH = "#e6dfcc"
 
-    def __init__(self, master, height=210, bg=PAPER, **kw):
+    def __init__(self, master, height=150, bg=PAPER, **kw):
         super().__init__(master, height=height, bg=bg, highlightthickness=0,
                          bd=0, **kw)
-        self._folio = ""
-        self._font = tkfont.Font(font=("Playfair Display", 190, "bold"))
         self.bind("<Configure>", lambda e: self.redraw())
-
-    def set_folio(self, text):
-        if text != self._folio:
-            self._folio = text
-            self.redraw()
 
     def redraw(self):
         self.delete("all")
@@ -689,9 +659,6 @@ class Ephemera(tk.Canvas):
             return
         if w < 60 or h < 20:
             return
-        if self._folio:
-            self.create_text(70, h // 2 + 10, text=self._folio, fill=self.WASH,
-                             font=self._font, anchor="w")
         cy = h // 2 - 4
         self.create_line(0, cy + 3, max(0, w - 250), cy - 2, fill=RULE,
                          width=1)
@@ -707,48 +674,12 @@ class Ephemera(tk.Canvas):
                          outline=self.RING, width=2)
         self.create_oval(rx + 72, ry + 42, rx + 76, ry + 46,
                          fill=self.RING, outline="")
-        for sx, sy in ((rx - 96, ry - 56), (rx + 90, ry - 40),
-                       (rx - 60, ry + 62)):
+        for sx, sy in ((rx + 90, ry - 40), (rx - 60, ry + 62)):
             self.create_line(sx - 5, sy, sx + 5, sy, fill=PENCIL_LT,
                              width=1)
             self.create_line(sx, sy - 5, sx, sy + 5, fill=PENCIL_LT,
                              width=1)
-        # veg doodle row along the bottom: tomato, wheat, chili and a
-        # stamped shakahari mark
-        dy = h - 48
-        self._doodle_tomato(w * 0.20, dy)
-        self._doodle_wheat(w * 0.40, dy)
-        self._doodle_chili(w * 0.60, dy)
-        self._veg_mark(max(w - 190, w * 0.72), dy)
-
-    def _doodle_tomato(self, x, y):
-        c = INK_SOFT
-        self.create_oval(x - 13, y - 12, x + 13, y + 14, outline=c, width=2)
-        for dx, dy in ((-9, -12), (-4, -16), (2, -17), (8, -14), (12, -10)):
-            self.create_line(x, y - 12, x + dx, y + dy, fill=c, width=2)
-        self.create_line(x + 2, y - 17, x + 2, y - 24, fill=c, width=2)
-        self.create_arc(x - 9, y - 8, x - 2, y + 2, start=90, extent=120,
-                        outline=c, width=1, style="arc")
-
-    def _doodle_wheat(self, x, y):
-        c = INK_SOFT
-        self.create_line(x, y + 22, x, y - 22, fill=c, width=2)
-        for i, dy in enumerate((-14, -6, 2, 10)):
-            side = 1 if i % 2 == 0 else -1
-            self.create_line(x, y + dy, x + side * 11, y + dy - 8, fill=c,
-                             width=2)
-            self.create_line(x, y + dy + 4, x - side * 11, y + dy - 4,
-                             fill=c, width=2)
-        self.create_line(x, y - 22, x - 4, y - 30, fill=c, width=1)
-        self.create_line(x, y - 22, x + 4, y - 30, fill=c, width=1)
-
-    def _doodle_chili(self, x, y):
-        c = INK_SOFT
-        self.create_line(x - 14, y - 8, x - 2, y + 2, x + 12, y - 2,
-                         fill=c, width=6, capstyle="round", smooth=True)
-        self.create_line(x + 12, y - 2, x + 18, y - 12, fill=c, width=2)
-        self.create_line(x + 18, y - 12, x + 12, y - 14, fill=c, width=2)
-        self.create_line(x + 18, y - 12, x + 22, y - 16, fill=c, width=2)
+        self._veg_mark(rx - 108, ry + 8)
 
     def _veg_mark(self, x, y):
         self.create_rectangle(x - 13, y - 13, x + 13, y + 13, outline=VEG,
@@ -756,6 +687,129 @@ class Ephemera(tk.Canvas):
         self.create_rectangle(x - 10, y - 10, x + 10, y + 10, outline=VEG,
                               width=1)
         self.create_oval(x - 6, y - 6, x + 6, y + 6, fill=VEG, outline="")
+
+
+# ------------------------------------------------------- grove
+class Grove(tk.Canvas):
+    """Tangerine trees for the empty stretches: deep marigold fruit and
+    olive leaves on bark branches, flat fills with depth. Mode 'grove'
+    rises from the bottom-left corner to fill a void; 'sprig' is a small
+    cutting for panel footers."""
+
+    FRUIT = "#c96a24"
+    FRUIT_DK = "#96501c"
+    FRUIT_HI = "#f2c078"
+    LEAF = "#5a7a2a"
+    LEAF_DK = "#42591d"
+    BARK = "#6b4a2f"
+    SPARK = "#d9a441"
+    WASH = "#e6dfcc"
+
+    def __init__(self, master, mode="grove", bg=PAPER, **kw):
+        super().__init__(master, bg=bg, highlightthickness=0, bd=0, **kw)
+        self._mode = mode
+        self._folio = ""
+        self._fonts = {}
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def set_folio(self, text):
+        if text != self._folio:
+            self._folio = text
+            self.redraw()
+
+    def _folio_font(self, size):
+        if size not in self._fonts:
+            self._fonts[size] = tkfont.Font(
+                font=("Playfair Display", size, "bold"))
+        return self._fonts[size]
+
+    def _branch(self, points, width):
+        flat = [c for p in points for c in p]
+        self.create_line(*flat, fill=self.BARK, width=width, smooth=True,
+                         capstyle="round")
+
+    def _leaf(self, x, y, length, angle_deg):
+        a = math.radians(angle_deg)
+        dx, dy = math.cos(a), math.sin(a)
+        px, py = -dy, dx
+        half, third = length / 2, length * 0.21
+        tip = (x + dx * half, y + dy * half)
+        base = (x - dx * half, y - dy * half)
+        m1 = (x + px * third + dx * half * 0.12,
+              y + py * third + dy * half * 0.12)
+        m2 = (x - px * third + dx * half * 0.12,
+              y - py * third + dy * half * 0.12)
+        self.create_polygon([tip, m1, base, m2], fill=self.LEAF,
+                            outline=self.LEAF_DK, width=1.5)
+        self.create_line(base, tip, fill=self.LEAF_DK, width=1)
+
+    def _fruit(self, x, y, r):
+        self.create_oval(x - r, y - r, x + r, y + r, fill=self.FRUIT,
+                         outline=self.FRUIT_DK, width=2)
+        self.create_oval(x - r * 0.45, y - r * 0.52, x - r * 0.12,
+                         y - r * 0.2, fill=self.FRUIT_HI, outline="")
+        self.create_line(x, y - r, x, y - r - 7, fill=self.FRUIT_DK,
+                         width=2)
+        self._leaf(x + 7, y - r - 9, 17, -28)
+
+    def _spark(self, x, y, r):
+        self.create_line(x - r, y, x + r, y, fill=self.SPARK, width=2)
+        self.create_line(x, y - r, x, y + r, fill=self.SPARK, width=2)
+        self.create_polygon([(x, y - r * 0.5), (x + r * 0.18, y),
+                             (x, y + r * 0.5), (x - r * 0.18, y)],
+                            fill=self.SPARK, outline="")
+
+    def redraw(self):
+        self.delete("all")
+        try:
+            w, h = self.winfo_width(), self.winfo_height()
+        except Exception:
+            return
+        if w < 80 or h < 60:
+            return
+        if self._mode == "sprig":
+            self._sprig(w, h)
+            return
+        if self._folio:
+            size = max(80, min(190, int(h * 0.62)))
+            self.create_text(56, h * 0.44, text=self._folio, fill=self.WASH,
+                             font=self._folio_font(size), anchor="w")
+        btw = lambda f: w * f
+        self._branch([(14, h - 6), (btw(0.09), h - 74), (btw(0.17), h - 148),
+                      (btw(0.27), h * 0.30)], 6)
+        self._branch([(btw(0.09), h - 74), (btw(0.16), h - 60),
+                      (btw(0.22), h - 78)], 3)
+        self._branch([(btw(0.17), h - 148), (btw(0.24), h - 168),
+                      (btw(0.30), h - 158)], 3)
+        self._branch([(btw(0.05), h - 40), (btw(0.02), h - 90)], 3)
+        for lx, ly, ll, la in ((btw(0.06), h - 60, 34, -50),
+                               (btw(0.13), h - 100, 38, 30),
+                               (btw(0.11), h - 130, 30, -120),
+                               (btw(0.20), h - 120, 34, 55),
+                               (btw(0.24), h - 190, 30, -40),
+                               (btw(0.16), h - 210, 28, 140),
+                               (btw(0.04), h - 70, 26, 160),
+                               (btw(0.28), h - 130, 26, 20)):
+            self._leaf(lx, ly, ll, la)
+        self._fruit(btw(0.22), h - 78, 19)
+        self._fruit(btw(0.30), h - 158, 15)
+        self._fruit(btw(0.045), h - 108, 13)
+        for sx, sy, sr in ((btw(0.36), h * 0.22, 10),
+                           (btw(0.45), h * 0.42, 7),
+                           (btw(0.14), h * 0.12, 8),
+                           (btw(0.55), h * 0.18, 9)):
+            self._spark(sx, sy, sr)
+
+    def _sprig(self, w, h):
+        cy = h // 2
+        self._branch([(8, cy + 8), (w * 0.30, cy), (w * 0.52, cy - 6)], 4)
+        self._leaf(w * 0.12, cy - 2, 26, -35)
+        self._leaf(w * 0.20, cy + 10, 24, 150)
+        self._leaf(w * 0.34, cy - 12, 24, -20)
+        self._leaf(w * 0.42, cy + 4, 22, 160)
+        self._fruit(w * 0.27, cy - 4, 14)
+        self._spark(w * 0.60, cy - 16, 8)
+        self._spark(w * 0.06, cy - 22, 6)
 
 
 # ------------------------------------------------------- scroll frame

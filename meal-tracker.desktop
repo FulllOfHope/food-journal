@@ -4,6 +4,7 @@ Name=Meal Tracker
 Comment=Track meals with daily reminders and analytics
 Exec=/home/nirajhariyani/bhu-meal-tracker gui
 Icon=food-journal
+StartupWMClass=FoodJournal
 Terminal=false
 Categories=Utility;Office;
 StartupNotify=true

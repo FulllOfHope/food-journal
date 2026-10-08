@@ -17,7 +17,7 @@ from pathlib import Path
 from tkinter import ttk
 
 try:
-    from PIL import Image, ImageFilter, ImageTk
+    from PIL import Image, ImageDraw, ImageFilter, ImageTk
     _PIL = True
 except Exception:
     _PIL = False
@@ -457,7 +457,9 @@ class PhotoBanner(tk.Canvas):
                     img = Image.open(self._photo).convert("RGB")
                     img = cover_fit(img, w, h, self._anchor)
                     img = img.filter(ImageFilter.GaussianBlur(0.8))
-                    img = bake_scrim(img)
+                    img = Image.blend(Image.new("RGB", img.size, PAPER_RGB),
+                                      img, 0.62)
+                    img = bake_scrim(img, top_a=70, bot_a=150)
                     self._img = ImageTk.PhotoImage(img)
                     self._key = key
                 except Exception:
@@ -775,6 +777,62 @@ class Seal(tk.Canvas):
         self.create_oval(5, 6, s - 5, s - 4, outline=STAMP, width=1)
         self.create_line(s * 0.32, s * 0.54, s * 0.46, s * 0.68,
                           s * 0.70, s * 0.34, fill=STAMP, width=2)
+
+
+# ------------------------------------------------------- photo prints
+class Polaroid(tk.Frame):
+    """A pasted photo print for empty stretches: your art with a cream
+    border and a handwritten caption carrying real day facts. Fixed
+    size, so it never flickers or shifts the layout."""
+
+    def __init__(self, master, photo=None, width=280, bg=PAPER, **kw):
+        super().__init__(master, bg="#fbf7ec", bd=0, highlightthickness=1,
+                         highlightbackground=RULE_DK, **kw)
+        self._label = tk.Label(self, bg="#fbf7ec", bd=0, highlightthickness=0)
+        self._label.pack(padx=12, pady=(12, 6))
+        self._cap = tk.Label(self, bg="#fbf7ec", fg=INK_SOFT,
+                             font=hand(14))
+        self._cap.pack(pady=(0, 10))
+        if photo and _PIL:
+            try:
+                img = Image.open(photo).convert("RGB")
+                side = width - 24
+                self._img = ImageTk.PhotoImage(cover_fit(img, side, side,
+                                                         0.4))
+                self._label.configure(image=self._img)
+            except Exception:
+                self._label.configure(text="(photo missing)", fg=PENCIL)
+        else:
+            self._label.configure(text="(photo missing)", fg=PENCIL)
+
+    def set_caption(self, text):
+        self._cap.configure(text=text)
+
+
+class Medallion(tk.Label):
+    """A round tangerine portrait for panel headers."""
+
+    def __init__(self, master, photo, size=88, bg=PAPER, **kw):
+        super().__init__(master, bg=bg, bd=0, highlightthickness=0, **kw)
+        self._img = None
+        if photo and _PIL:
+            try:
+                img = Image.open(photo).convert("RGB")
+                img = cover_fit(img, size, size, 0.4)
+                mask = Image.new("L", (size, size), 0)
+                d = ImageDraw.Draw(mask)
+                d.ellipse((0, 0, size - 1, size - 1), fill=255)
+                img = img.convert("RGBA")
+                img.putalpha(mask)
+                ring = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+                rd = ImageDraw.Draw(ring)
+                rd.ellipse((1, 1, size - 2, size - 2),
+                           outline=(33, 33, 33, 255), width=2)
+                self._img = ImageTk.PhotoImage(
+                    Image.alpha_composite(img, ring))
+                self.configure(image=self._img)
+            except Exception:
+                pass
 
 
 # ------------------------------------------------------- scroll frame

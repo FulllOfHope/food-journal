@@ -55,36 +55,37 @@ class MealCard(tk.Frame):
     meta. Eaten entries ink the heading; the stamp does the talking."""
 
     def __init__(self, master, app, meal):
-        super().__init__(master, bg=th.PAPER, bd=0, highlightthickness=0)
+        super().__init__(master, bg=th.CARD, bd=0, highlightthickness=1,
+                         highlightbackground=th.RULE)
         self.app = app
         self.meal = meal
         self.date = mc.today()
         self._enabled = True
 
-        self.body = tk.Frame(self, bg=th.PAPER, bd=0, highlightthickness=0)
+        self.body = tk.Frame(self, bg=th.CARD, bd=0, highlightthickness=0)
         self.body.pack(fill="both", expand=True, padx=4, pady=4)
 
-        self.head = tk.Frame(self.body, bg=th.PAPER)
+        self.head = tk.Frame(self.body, bg=th.CARD)
         self.head.pack(fill="x", padx=16, pady=(14, 0))
-        self.name = tk.Label(self.head, bg=th.PAPER, fg=th.INK_SOFT,
+        self.name = tk.Label(self.head, bg=th.CARD, fg=th.INK_SOFT,
                              font=th.mono(11))
         self.name.pack(side="left")
-        self.key = tk.Label(self.head, bg=th.PAPER, fg=th.PENCIL,
+        self.key = tk.Label(self.head, bg=th.CARD, fg=th.PENCIL,
                             font=th.mono(11))
         self.key.pack(side="right")
 
-        self.stamp = th.Stamp(self.body, height=54, bg=th.PAPER)
+        self.stamp = th.Stamp(self.body, height=54, bg=th.CARD)
         self.stamp.pack(anchor="w", padx=16, pady=(20, 20))
 
         self.rule = tk.Frame(self.body, bg=th.RULE, height=1, bd=0)
         self.rule.pack(fill="x", padx=16)
 
-        self.foot = tk.Frame(self.body, bg=th.PAPER)
+        self.foot = tk.Frame(self.body, bg=th.CARD)
         self.foot.pack(fill="x", padx=16, pady=(10, 14))
-        self.meta_l = tk.Label(self.foot, bg=th.PAPER, fg=th.INK_SOFT,
+        self.meta_l = tk.Label(self.foot, bg=th.CARD, fg=th.INK_SOFT,
                                font=th.mono(12))
         self.meta_l.pack(side="left")
-        self.meta_r = tk.Label(self.foot, bg=th.PAPER, fg=th.INK_SOFT,
+        self.meta_r = tk.Label(self.foot, bg=th.CARD, fg=th.INK_SOFT,
                                font=th.mono(12))
         self.meta_r.pack(side="right")
 
@@ -103,13 +104,14 @@ class MealCard(tk.Frame):
     def _enter(self, _e=None):
         if not self._enabled:
             return
-        self.configure(cursor="hand2")
+        self.configure(highlightbackground=th.RULE_DK, cursor="hand2")
         self.name.configure(fg=th.INK)
         self.rule.configure(bg=th.RULE_DK)
 
     def _leave(self, _e=None):
         self.name.configure(fg=th.INK_SOFT)
         self.rule.configure(bg=th.RULE)
+        self._paint()
         self.configure(cursor="")
 
     def _click(self, _e=None):
@@ -125,6 +127,11 @@ class MealCard(tk.Frame):
         e = mc.peek_day(self.date)
         if bool(e.get(self.meal, False)) and self._enabled:
             self.stamp.strike()
+
+    def _paint(self):
+        e = mc.peek_day(self.date)
+        eaten = bool(e.get(self.meal, False)) and self._enabled
+        self.configure(highlightbackground=th.INK if eaten else th.RULE)
 
     # -- content ----------------------------------------------------
     def set_day(self, date):
@@ -169,6 +176,7 @@ class MealCard(tk.Frame):
                     fg=th.INK if eaten else th.INK_SOFT)
                 self.meta_r.configure(text=rupees(unit * n),
                                       fg=th.INK if eaten else th.INK_SOFT)
+        self._paint()
 
 
 class CardRow(tk.Frame):
@@ -193,7 +201,7 @@ class CardRow(tk.Frame):
 # ----------------------------------------------------------------- app
 class MealApp(tk.Tk):
     def __init__(self):
-        super().__init__()
+        super().__init__(className="FoodJournal")
         self.title(APP_TITLE)
         self.configure(bg=th.PAPER)
         try:
@@ -289,18 +297,21 @@ class MealApp(tk.Tk):
                                        anchor=0.85),
         }
 
-        # -- sticker strip: the day's stamps pasted under the photo
+        # -- sticker strip: the day's stamps stacked at the right,
+        # the way a masthead margin should read
         strip = tk.Frame(self.paper, bg=th.PAPER)
         strip.pack(fill="x", padx=GUTTER, pady=(14, 0))
-        self.mast_datestamp = th.Stamp(strip, height=38, bg=th.PAPER,
+        right = tk.Frame(strip, bg=th.PAPER)
+        right.pack(side="right")
+        self.mast_folio = tk.Label(right, bg=th.PAPER, fg=th.PENCIL,
+                                   font=th.mono(12), anchor="e")
+        self.mast_folio.pack(anchor="e")
+        self.mast_datestamp = th.Stamp(right, height=38, bg=th.PAPER,
                                        font=("Outfit", 11, "bold"))
-        self.mast_datestamp.pack(side="left")
-        self.mast_ed = th.Stamp(strip, height=38, bg=th.PAPER,
+        self.mast_datestamp.pack(anchor="e", pady=(6, 0))
+        self.mast_ed = th.Stamp(right, height=38, bg=th.PAPER,
                                 font=("Outfit", 11, "bold"))
-        self.mast_ed.pack(side="left", padx=(12, 0))
-        self.mast_folio = tk.Label(strip, bg=th.PAPER, fg=th.PENCIL,
-                                   font=th.mono(12))
-        self.mast_folio.pack(side="right")
+        self.mast_ed.pack(anchor="e", pady=(6, 0))
 
         # -- views
         self.views = {}
@@ -372,6 +383,14 @@ class MealApp(tk.Tk):
         th.RoundedButton(row, "MARK ALL EATEN",
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
+
+        self.void = tk.Frame(parent, bg=th.PAPER)
+        self.void.pack(fill="both", expand=True, pady=(20, 0))
+        _pol = th.art("log.jpg", "bg.jpg")
+        self.polaroid = th.Polaroid(self.void, photo=_pol) if _pol else None
+        if self.polaroid is not None:
+            self.polaroid.place(relx=1.0, rely=1.0, anchor="se", x=-16,
+                                y=-8)
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -482,9 +501,14 @@ class MealApp(tk.Tk):
         self.ins_b2.pack(anchor="w")
 
         th.hline(body, pady=(20, 20))
-        bill_head = tk.Label(body, text="CYCLE BILL", bg=th.PAPER,
+        brow2 = tk.Frame(body, bg=th.PAPER)
+        brow2.pack(fill="x", pady=(0, 8))
+        bill_head = tk.Label(brow2, text="CYCLE BILL", bg=th.PAPER,
                              fg=th.PENCIL, font=th.mono(10))
-        bill_head.pack(anchor="w", pady=(0, 8))
+        bill_head.pack(side="left")
+        _med = th.art("today.jpg", "bg.jpg")
+        if _med:
+            th.Medallion(brow2, photo=_med, size=84).pack(side="right")
         trow = tk.Frame(body, bg=th.PAPER)
         trow.pack(fill="x")
         tk.Label(trow, text="Total liability to date", bg=th.PAPER,
@@ -582,6 +606,10 @@ class MealApp(tk.Tk):
         self.today_sum.configure(
             text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
                  f"{rupees(today_bill)}")
+        if getattr(self, "polaroid", None) is not None:
+            _dno = (now - mc.cycle_start(now)).days + 1
+            self.polaroid.set_caption(
+                f"day {_dno:02d} \u2014 {today_e['meals_counted']:g} meals")
 
     def refresh_log(self):
         self.log_cards.set_day(self.log_date)

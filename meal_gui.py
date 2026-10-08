@@ -314,13 +314,13 @@ class MealApp(tk.Tk):
         if name != self.active_view:
             self.tab_ui[name][1].configure(fg=th.PENCIL)
 
-    def _turn(self, direction, widget):
+    def _turn(self, direction, widget, ms=480):
         """A page-flip wipe across a freshly swapped view."""
         try:
             self.update_idletasks()
             box = (widget.winfo_x(), widget.winfo_y(),
                    widget.winfo_width(), widget.winfo_height())
-            th.PageTurn.play(self.paper, box, direction)
+            th.PageTurn.play(self.paper, box, direction, ms=ms)
         except Exception:
             pass
 
@@ -414,7 +414,8 @@ class MealApp(tk.Tk):
     def _step(self, delta):
         self.log_date += timedelta(days=delta)
         self.refresh_all()
-        self._turn(+1 if delta > 0 else -1, self.views["LOG / EDIT"])
+        self._turn(+1 if delta > 0 else -1, self.views["LOG / EDIT"],
+                   ms=320)
 
     def _jump_today(self):
         self.log_date = mc.today()
@@ -626,7 +627,7 @@ class MealApp(tk.Tk):
                 direction = +1 if dd >= self.log_date else -1
                 self.log_date = dd
                 self.refresh_all()
-                self._turn(direction, self.views["LOG / EDIT"])
+                self._turn(direction, self.views["LOG / EDIT"], ms=320)
 
             base = th.INK if not prev_cycle else th.PENCIL
             l1 = tk.Label(row, text=d.strftime("%d %b"), width=7, anchor="w",

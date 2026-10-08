@@ -576,12 +576,15 @@ class Seal(tk.Canvas):
 # ------------------------------------------------------- page turn
 class PageTurn:
     """A page-flip wipe: a blank sheet sweeps across a container,
-    revealing the freshly swapped content beneath it."""
+    revealing the freshly swapped content beneath it.
+
+    Slow eased travel with a shaded curl edge, so it reads as paper
+    turning rather than a UI flicker."""
 
     _busy = False
 
     @classmethod
-    def play(cls, parent, box, direction=+1):
+    def play(cls, parent, box, direction=+1, ms=480):
         if cls._busy:
             return
         x, y, w, h = box
@@ -589,21 +592,30 @@ class PageTurn:
             return
         try:
             cover = tk.Frame(parent, bg="#e7e0cf", bd=0)
-            edge = tk.Frame(cover, bg=RULE_DK, width=3, bd=0)
-            edge.pack(side="left" if direction > 0 else "right", fill="y")
+            edge = tk.Frame(cover, bg=RULE_DK, width=2, bd=0)
+            shade = tk.Frame(cover, bg="#d9d0ba", width=12, bd=0)
+            if direction > 0:
+                edge.pack(side="left", fill="y")
+                shade.pack(side="left", fill="y")
+            else:
+                edge.pack(side="right", fill="y")
+                shade.pack(side="right", fill="y")
             cover.place(x=x, y=y, width=w, height=h)
         except Exception:
             return
         cls._busy = True
-        steps = 9
+        steps = 16
+        interval = max(15, ms // steps)
 
         def move(i=0):
             try:
                 if i >= steps or not cover.winfo_exists():
                     raise StopIteration
-                nx = x - direction * int(w * (i + 1) / steps)
+                t = (i + 1) / steps
+                eased = t * t * (3 - 2 * t)  # smoothstep: lift, whip, settle
+                nx = x - direction * int(w * eased)
                 cover.place(x=nx, y=y, width=w, height=h)
-                cover.after(22, lambda: move(i + 1))
+                cover.after(interval, lambda: move(i + 1))
             except StopIteration:
                 try:
                     cover.destroy()

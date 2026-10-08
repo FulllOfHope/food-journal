@@ -171,8 +171,8 @@ def label(parent, text="", fg=INK, bg=CARD, font=None, anchor="w", **kw):
 
 
 def eyebrow(parent, text, bg=PAPER, fg=PENCIL):
-    """Small-caps section kicker, e.g. 'ENTRY - SUNDAY'."""
-    return tk.Label(parent, text=text, bg=bg, fg=fg, font=mono(10),
+    """Hand-lettered section kicker, e.g. 'ENTRY - SUNDAY'."""
+    return tk.Label(parent, text=text, bg=bg, fg=fg, font=hand(14),
                     anchor="w")
 
 
@@ -197,7 +197,7 @@ def button(parent, text, command, kind="ghost", bg=None, font=None,
         idle, idle_fg, holder_bg = bg, INK_SOFT, RULE_DK
     holder = tk.Frame(parent, bg=holder_bg, bd=0, highlightthickness=0)
     lbl = tk.Label(holder, text=text, bg=idle, fg=idle_fg,
-                   font=font or mono(10), padx=padx, pady=pady,
+                   font=font or hand(14, "bold"), padx=padx, pady=pady,
                    cursor="hand2")
     lbl.pack(padx=1, pady=1)
 
@@ -359,18 +359,26 @@ class Stamp(tk.Canvas):
     def set(self, text, kind="eaten"):
         self._cancel()
         self._text, self._kind = text or "", kind
+        # Fix the width up front: scaling the ink mid-strike must never
+        # move the layout, or the whole card breathes and the motion judders.
+        self.configure(width=self._measure(1.0))
         self._draw(1.0, 0, 0, 0.0)
 
     def strike(self, text=None, kind=None):
-        """Replay the stamp landing after a toggle to eaten."""
+        """Replay the stamp landing after a toggle to eaten: overshoot,
+        press, settle over six eased frames."""
         if text is not None:
             self._text = text
         if kind is not None:
             self._kind = kind
         self._cancel()
-        self._frames = [(1.45, 3, 3, 0.35),
-                        (1.15, 1, 1, 0.15),
-                        (1.0, 0, 0, 0.0)]
+        self.configure(width=self._measure(1.0))
+        self._frames = [(1.50, 4, 4, 0.40),
+                        (1.34, 3, 3, 0.30),
+                        (1.20, 2, 2, 0.22),
+                        (1.10, 1, 1, 0.12),
+                        (1.03, 0, 0, 0.05),
+                        (1.00, 0, 0, 0.00)]
         self._step_strike()
 
     def _step_strike(self):
@@ -384,7 +392,7 @@ class Stamp(tk.Canvas):
             return
         if self._frames:
             try:
-                self._job = self.after(55, self._step_strike)
+                self._job = self.after(30, self._step_strike)
             except Exception:
                 pass
 
@@ -396,6 +404,16 @@ class Stamp(tk.Canvas):
                 pass
             self._job = None
 
+    def _scaled_font(self, scale):
+        spec = (self._spec[0], max(6, int(round(self._base_size * scale)))
+                ) + tuple(self._spec[2:])
+        return tkfont.Font(font=spec)
+
+    def _measure(self, scale):
+        font = self._scaled_font(scale)
+        total = sum(font.measure(c) + self._tracking for c in self._text)
+        return int(total * 1.6) + 28 if self._text else 1
+
     def _draw(self, scale, dx, dy, boost):
         color = self.KINDS.get(self._kind, STAMP)
         if boost:
@@ -403,19 +421,20 @@ class Stamp(tk.Canvas):
         self.delete("all")
         self.configure(bg=self._bg)
         if not self._text:
-            self.configure(width=1)
             return
-        size = max(6, int(round(self._base_size * scale)))
-        spec = (self._spec[0], size) + tuple(self._spec[2:])
-        font = tkfont.Font(font=spec)
+        font = self._scaled_font(scale)
         widths = [font.measure(c) + self._tracking for c in self._text]
         total = sum(widths)
         h = font.metrics("linespace")
         try:
+            width = int(self.cget("width"))
+        except Exception:
+            width = int(total * 1.6) + 28
+        cx = width / 2 + dx
+        try:
             cy = int(self.cget("height")) // 2 + dy
         except Exception:
             cy = 27 + dy
-        cx = total / 2 + 12 + dx
         ghost = lerp_hex(color, self._bg, 0.55)
         stamp_box(self, cx, cy, total / 2 + 10, h / 2 + 8, color, width=2)
         x = cx - total / 2
@@ -427,7 +446,6 @@ class Stamp(tk.Canvas):
             self.create_text(char_cx, y, text=c, fill=color, font=font,
                              anchor="center")
             x += wdx
-        self.configure(width=int(total) + 28)
 
 
 # ------------------------------------------------------- pencil marks
@@ -604,7 +622,7 @@ class PageTurn:
         except Exception:
             return
         cls._busy = True
-        steps = 16
+        steps = 12  # fewer, meatier repaints: cheaper than many small ones
         interval = max(15, ms // steps)
 
         def move(i=0):

@@ -64,10 +64,10 @@ class MealCard(tk.Frame):
         self.head = tk.Frame(self, bg=th.CARD)
         self.head.pack(fill="x", padx=16, pady=(14, 0))
         self.name = tk.Label(self.head, bg=th.CARD, fg=th.INK_SOFT,
-                             font=th.mono(11))
+                             font=th.hand(15, "bold"))
         self.name.pack(side="left")
         self.key = tk.Label(self.head, bg=th.CARD, fg=th.PENCIL,
-                            font=th.mono(11))
+                            font=th.hand(13))
         self.key.pack(side="right")
 
         self.stamp = th.Stamp(self, height=54, bg=th.CARD)
@@ -242,7 +242,7 @@ class MealApp(tk.Tk):
         for name in ("TODAY", "LOG / EDIT", "INSIGHTS"):
             holder = tk.Frame(tabs, bg=th.PAPER)
             lbl = tk.Label(holder, text=name, bg=th.PAPER, fg=th.PENCIL,
-                           font=th.mono(10), padx=12, pady=8,
+                           font=th.hand(14), padx=12, pady=4,
                            cursor="hand2")
             lbl.pack()
             underline = tk.Frame(holder, bg=th.PAPER, height=2)
@@ -398,7 +398,7 @@ class MealApp(tk.Tk):
         head = tk.Frame(parent, bg=th.PAPER)
         head.pack(fill="x", pady=(10, 8))
         self.log_hist_title = tk.Label(head, bg=th.PAPER, fg=th.PENCIL,
-                                       font=th.mono(10))
+                                       font=th.hand(14))
         self.log_hist_title.pack(side="left")
         th.button(head, "JUMP TO TODAY", self._jump_today,
                   kind="ghost", bg=th.PAPER)[0].pack(side="right")
@@ -453,13 +453,13 @@ class MealApp(tk.Tk):
         brow = tk.Frame(body, bg=th.PAPER)
         brow.pack(fill="x", pady=(0, 4))
         tk.Label(brow, text="03 \u2014 CYCLE", bg=th.PAPER, fg=th.PENCIL,
-                 font=th.mono(10)).pack(side="left")
+                 font=th.hand(14)).pack(side="left")
         self.ins_cycle = tk.Label(brow, bg=th.PAPER, fg=th.INK,
                                   font=th.display(20))
         self.ins_cycle.pack(side="left", padx=(14, 0))
 
         allow_head = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
-                              font=th.mono(10))
+                              font=th.hand(14))
         allow_head.pack(anchor="w", pady=(18, 0))
         self.ins_allow_head = allow_head
         arow = tk.Frame(body, bg=th.PAPER)
@@ -481,12 +481,12 @@ class MealApp(tk.Tk):
 
         th.hline(body, pady=(20, 20))
         bill_head = tk.Label(body, text="CYCLE BILL", bg=th.PAPER,
-                             fg=th.PENCIL, font=th.mono(10))
+                             fg=th.PENCIL, font=th.hand(14))
         bill_head.pack(anchor="w", pady=(0, 8))
         trow = tk.Frame(body, bg=th.PAPER)
         trow.pack(fill="x")
         tk.Label(trow, text="Total liability to date", bg=th.PAPER,
-                 fg=th.INK_SOFT, font=th.body(12)).pack(side="left")
+                 fg=th.INK_SOFT, font=th.hand(15)).pack(side="left")
         self.ins_bill_total = tk.Label(trow, bg=th.PAPER, fg=th.INK,
                                        font=th.display(22))
         self.ins_bill_total.pack(side="left", padx=(12, 0))
@@ -502,15 +502,13 @@ class MealApp(tk.Tk):
 
         th.hline(body, pady=(20, 20))
         self.ins_chart_head = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
-                                       font=th.mono(10))
+                                       font=th.hand(14))
         self.ins_chart_head.pack(anchor="w", pady=(0, 8))
-        self.ins_chart = charts.BarChart(body, height=190, thin=True,
-                                         vgrid=False, ymax=3.0,
-                                         target_ticks=6, value_fmt=False,
-                                         bg=th.GRAPH_BG)
+        self.ins_chart = charts.SketchBars(body, height=190,
+                                           bg=th.GRAPH_BG)
         self.ins_chart.pack(fill="x")
         self.ins_chart_note = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
-                                       font=th.mono(10))
+                                       font=th.hand(13))
         self.ins_chart_note.pack(anchor="w", pady=(8, 0))
 
     # ---------------------------------------------------------- refresh
@@ -597,7 +595,7 @@ class MealApp(tk.Tk):
         for d, e in mc.entries_between(view_start, min(ce, today_day)):
             if d == cs:
                 div = tk.Label(self.hist_list, bg=th.PAPER, fg=th.PENCIL,
-                               font=th.mono(10), anchor="w",
+                               font=th.hand(14), anchor="w",
                                text=f"\u2014 {cs.strftime('%d %b')}: "
                                     f"the cycle opens \u2014")
                 div.pack(fill="x", pady=8)

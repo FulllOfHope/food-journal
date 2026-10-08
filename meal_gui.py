@@ -196,6 +196,14 @@ class MealApp(tk.Tk):
         super().__init__()
         self.title(APP_TITLE)
         self.configure(bg=th.PAPER)
+        try:
+            _ic = tk.PhotoImage(
+                file=str(Path(__file__).resolve().parent / "icons" /
+                         "hicolor" / "48x48" / "apps" / "food-journal.png"))
+            self.iconphoto(True, _ic)
+            self._icon_ref = _ic
+        except Exception:
+            pass
         th.init_theme(self)
         self.detail_mode = False
         self.log_date = mc.today()
@@ -238,6 +246,15 @@ class MealApp(tk.Tk):
         head.pack(fill="x", padx=GUTTER, pady=(18, 0))
         brand = tk.Label(head, text=APP_TITLE, bg=th.PAPER, fg=th.INK,
                          font=th.display(16))
+        try:
+            _logo = tk.PhotoImage(
+                file=str(Path(__file__).resolve().parent / "icons" /
+                         "hicolor" / "32x32" / "apps" / "food-journal.png"))
+            mark = tk.Label(head, image=_logo, bg=th.PAPER, bd=0)
+            mark.pack(side="left", padx=(0, 10))
+            self._logo_ref = _logo
+        except Exception:
+            pass
         brand.pack(side="left")
         tabs = tk.Frame(head, bg=th.PAPER)
         tabs.pack(side="right")

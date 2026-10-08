@@ -11,6 +11,7 @@ import math
 import random
 import tkinter as tk
 import tkinter.font as tkfont
+import zlib
 from tkinter import ttk
 
 # ---------------------------------------------------------------- palette
@@ -187,44 +188,52 @@ def double_rule(parent, pady=8):
                                                      pady=(0, pady))
 
 
-def button(parent, text, command, kind="ghost", bg=None, font=None,
-           padx=16, pady=8):
-    """Letterpress buttons: solid ink primary, ruled ghost secondary."""
-    bg = bg or PAPER
-    if kind == "primary":
-        idle, idle_fg, holder_bg = INK, PAPER, INK
-    else:
-        idle, idle_fg, holder_bg = bg, INK_SOFT, RULE_DK
-    holder = tk.Frame(parent, bg=holder_bg, bd=0, highlightthickness=0)
-    lbl = tk.Label(holder, text=text, bg=idle, fg=idle_fg,
-                   font=font or mono(10), padx=padx, pady=pady,
-                   cursor="hand2")
-    lbl.pack(padx=1, pady=1)
+class LinkButton(tk.Frame):
+    """A text button with a hand-ruled underline instead of a box: a
+    single rule appears on hover, primary actions wear a double rule."""
 
-    def enter(_=None):
-        if kind == "primary":
-            lbl.configure(bg=PAPER, fg=INK)
-        else:
-            lbl.configure(bg=CARD_HI, fg=INK)
-            holder.configure(bg=INK)
+    def __init__(self, master, text, command, kind="ghost", bg=PAPER,
+                 font=None, **kw):
+        super().__init__(master, bg=bg, bd=0, highlightthickness=0, **kw)
+        self._kind = kind
+        self._bg = bg
+        self._font = tkfont.Font(font=font or mono(10))
+        self._lbl = tk.Label(self, text=text, bg=bg,
+                             fg=INK if kind == "primary" else PENCIL,
+                             font=self._font, cursor="hand2")
+        self._lbl.pack()
+        self._rule = tk.Canvas(self, height=6, bg=bg, highlightthickness=0,
+                               bd=0)
+        self._rule.pack(fill="x")
+        self._command = command
+        self._draw_rule(False)
+        for w in (self, self._lbl, self._rule):
+            w.bind("<Button-1>", self._click)
+            w.bind("<Enter>", self._enter)
+            w.bind("<Leave>", self._leave)
 
-    def leave(_=None):
-        lbl.configure(bg=idle, fg=idle_fg)
-        holder.configure(bg=holder_bg)
+    def _draw_rule(self, hot):
+        self._rule.delete("all")
+        w = self._font.measure(self._lbl.cget("text")) + 6
+        self._rule.configure(width=w)
+        if self._kind == "primary":
+            col = STAMP if hot else INK
+            self._rule.create_line(2, 4, w - 2, 1, fill=col, width=1)
+            self._rule.create_line(2, 5, w - 2, 2, fill=col, width=1)
+        elif hot:
+            self._rule.create_line(2, 4, w - 2, 1, fill=RULE_DK, width=1)
 
-    def press(_=None):
-        lbl.configure(bg=STAMP, fg=PAPER)
+    def _enter(self, _e=None):
+        self._lbl.configure(fg=STAMP if self._kind == "primary" else INK)
+        self._draw_rule(True)
 
-    def release(event=None):
-        leave()
-        command()
+    def _leave(self, _e=None):
+        self._lbl.configure(
+            fg=INK if self._kind == "primary" else PENCIL)
+        self._draw_rule(False)
 
-    for w in (holder, lbl):
-        w.bind("<Enter>", enter)
-        w.bind("<Leave>", leave)
-        w.bind("<ButtonPress-1>", press)
-        w.bind("<ButtonRelease-1>", release)
-    return holder, lbl
+    def _click(self, _e=None):
+        self._command()
 
 
 # ------------------------------------------------------- journal paper
@@ -356,6 +365,16 @@ class Stamp(tk.Canvas):
         self._kind = "eaten"
         self._job = None
         self._fonts = {}
+        self._hover_ring = False
+
+    def set_hover(self, on):
+        """Pencil-circle the stamp on hover, like circling it in the margin."""
+        on = bool(on)
+        if on == self._hover_ring:
+            return
+        self._hover_ring = on
+        self._cancel()
+        self._draw(1.0, 0, 0, 0.0)
 
     def set(self, text, kind="eaten"):
         self._cancel()
@@ -452,6 +471,27 @@ class Stamp(tk.Canvas):
             self.create_text(char_cx, y, text=c, fill=color, font=font,
                              anchor="center")
             x += wdx
+        # Circle what matters, the way a margin note would: eaten stamps
+        # wear a permanent ink ring, hovered ones a pencil ring.
+        ring = None
+        if self._kind == "eaten":
+            ring = INK
+        elif self._hover_ring and self._kind == "pending":
+            ring = PENCIL_LT
+        if ring is not None:
+            self._draw_ring(cx, cy, total / 2 + 10, h / 2 + 8, ring)
+
+    def _draw_ring(self, cx, cy, hw, hh, color):
+        seed = zlib.crc32((self._text or " ").encode()) & 0xffffffff
+        rng = random.Random(seed)
+        rx, ry = hw + 8, hh + 6
+        pts = []
+        for k in range(16):
+            ang = 2 * math.pi * k / 16
+            rr = rng.uniform(-2.0, 2.0)
+            pts.extend([cx + (rx + rr) * math.cos(ang),
+                        cy + (ry + rr) * math.sin(ang)])
+        self.create_polygon(pts, outline=color, fill="", width=2)
 
 
 # ------------------------------------------------------- pencil marks
@@ -595,6 +635,48 @@ class Seal(tk.Canvas):
         self.create_oval(5, 6, s - 5, s - 4, outline=STAMP, width=1)
         self.create_line(s * 0.32, s * 0.54, s * 0.46, s * 0.68,
                          s * 0.70, s * 0.34, fill=STAMP, width=2)
+
+
+# ------------------------------------------------------- ephemera
+class Ephemera(tk.Canvas):
+    """Margin doodles for empty stretches: an asterism divider with
+    hairlines and a faint coffee ring, both pure paper furniture."""
+
+    RING = "#b08d5f"
+
+    def __init__(self, master, height=120, bg=PAPER, **kw):
+        super().__init__(master, height=height, bg=bg, highlightthickness=0,
+                         bd=0, **kw)
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def redraw(self):
+        self.delete("all")
+        try:
+            w, h = self.winfo_width(), self.winfo_height()
+        except Exception:
+            return
+        if w < 60 or h < 20:
+            return
+        cy = h // 2 - 4
+        self.create_line(0, cy + 3, max(0, w - 230), cy - 2, fill=RULE,
+                         width=1)
+        cx = max(40, (w - 210) // 2)
+        for dx, dy in ((-9, 5), (9, 5), (0, -7)):
+            x, y = cx + dx, cy + dy
+            self.create_line(x - 5, y, x + 5, y, fill=RULE_DK, width=1)
+            self.create_line(x, y - 5, x, y + 5, fill=RULE_DK, width=1)
+        rx, ry = w - 82, cy + 4
+        self.create_oval(rx - 46, ry - 42, rx + 46, ry + 42,
+                         outline=self.RING, width=5, stipple="gray50")
+        self.create_oval(rx - 37, ry - 34, rx + 37, ry + 34,
+                         outline=self.RING, width=2, stipple="gray25")
+        self.create_oval(rx + 52, ry + 30, rx + 55, ry + 33,
+                         fill=self.RING, outline="")
+        for sx, sy in ((rx - 72, ry - 42), (rx + 68, ry - 30)):
+            self.create_line(sx - 4, sy, sx + 4, sy, fill=PENCIL_LT,
+                             width=1)
+            self.create_line(sx, sy - 4, sx, sy + 4, fill=PENCIL_LT,
+                             width=1)
 
 
 # ------------------------------------------------------- scroll frame

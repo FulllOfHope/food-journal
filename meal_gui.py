@@ -51,11 +51,11 @@ def day_complete(d, e):
 
 # ------------------------------------------------------------ meal cards
 class MealCard(tk.Frame):
-    """One entry sheet: eyebrow, rubber stamp, ruled meta."""
+    """One entry sheet: eyebrow, rubber stamp, ruled meta. No box: the
+    sheet sits bare on the paper and the stamp carries the state."""
 
     def __init__(self, master, app, meal):
-        super().__init__(master, bg=th.CARD, bd=0, highlightthickness=1,
-                         highlightbackground=th.RULE)
+        super().__init__(master, bg=th.CARD, bd=0, highlightthickness=0)
         self.app = app
         self.meal = meal
         self.date = mc.today()
@@ -99,10 +99,11 @@ class MealCard(tk.Frame):
     def _enter(self, _e=None):
         if not self._enabled:
             return
-        self.configure(highlightbackground=th.RULE_DK, cursor="hand2")
+        self.configure(cursor="hand2")
+        self.stamp.set_hover(True)
 
     def _leave(self, _e=None):
-        self._paint()
+        self.stamp.set_hover(False)
         self.configure(cursor="")
 
     def _click(self, _e=None):
@@ -341,11 +342,14 @@ class MealApp(tk.Tk):
         self.today_sum = tk.Label(row, bg=th.PAPER, fg=th.INK,
                                   font=th.mono(11))
         self.today_sum.pack(side="left")
-        th.button(row, "CLEAR", lambda: self._set_all_today(False),
-                  kind="ghost", bg=th.PAPER)[0].pack(side="right",
-                                                     padx=(10, 0))
-        th.button(row, "MARK ALL EATEN", lambda: self._set_all_today(True),
-                  kind="primary")[0].pack(side="right")
+        th.LinkButton(row, "CLEAR", lambda: self._set_all_today(False),
+                      kind="ghost").pack(side="right", padx=(10, 0))
+        th.LinkButton(row, "MARK ALL EATEN",
+                      lambda: self._set_all_today(True),
+                      kind="primary").pack(side="right")
+
+        self.ephemera = th.Ephemera(parent)
+        self.ephemera.pack(fill="x", pady=(28, 0))
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -362,13 +366,13 @@ class MealApp(tk.Tk):
     def _build_log(self, parent):
         nav = tk.Frame(parent, bg=th.PAPER)
         nav.pack(fill="x", pady=(0, 16))
-        th.button(nav, "< YESTERDAY", lambda: self._step(-1),
-                  kind="ghost", bg=th.PAPER)[0].pack(side="left")
+        th.LinkButton(nav, "< YESTERDAY", lambda: self._step(-1),
+                      kind="ghost").pack(side="left")
         self.log_title = tk.Label(nav, bg=th.PAPER, fg=th.INK,
                                   font=th.display(20))
         self.log_title.pack(side="left", expand=True)
-        th.button(nav, "TOMORROW >", lambda: self._step(1),
-                  kind="ghost", bg=th.PAPER)[0].pack(side="right")
+        th.LinkButton(nav, "TOMORROW >", lambda: self._step(1),
+                      kind="ghost").pack(side="right")
 
         self.log_cards = CardRow(parent, self)
         self.log_cards.pack(fill="x")
@@ -386,8 +390,8 @@ class MealApp(tk.Tk):
         self.log_hist_title = tk.Label(head, bg=th.PAPER, fg=th.PENCIL,
                                        font=th.mono(10))
         self.log_hist_title.pack(side="left")
-        th.button(head, "JUMP TO TODAY", self._jump_today,
-                  kind="ghost", bg=th.PAPER)[0].pack(side="right")
+        th.LinkButton(head, "JUMP TO TODAY", self._jump_today,
+                      kind="ghost").pack(side="right")
 
         self.hist_scroll = th.ScrollFrame(parent, bg=th.PAPER)
         self.hist_scroll.pack(fill="both", expand=True)
@@ -760,12 +764,12 @@ class MealApp(tk.Tk):
         b2 = mc.allowance_status(scope=2)
         b2_upcoming = mc.batch_of(now) < 2
         self.ins_b1.configure(
-            text=(f"Batch 1 ({b1s.strftime('%d %b')} \u2013 "
-                  f"{b1e.strftime('%d %b')} \u00b7 "
+            text=(f"Chapter One \u2014 Batch 1 ({b1s.strftime('%d %b')} "
+                  f"\u2013 {b1e.strftime('%d %b')} \u00b7 "
                   f"{(b1e - b1s).days + 1} days): {b1['missed']:g} missed"))
         self.ins_b2.configure(
-            text=(f"Batch 2 ({b2s.strftime('%d %b')} \u2013 "
-                  f"{b2e.strftime('%d %b')} \u00b7 "
+            text=(f"Chapter Two \u2014 Batch 2 ({b2s.strftime('%d %b')} "
+                  f"\u2013 {b2e.strftime('%d %b')} \u00b7 "
                   f"{(b2e - b2s).days + 1} days): {b2['missed']:g} missed"
                   + (" (upcoming)" if b2_upcoming else "")))
 

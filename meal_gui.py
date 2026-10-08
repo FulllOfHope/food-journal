@@ -85,11 +85,8 @@ class MealCard(tk.Frame):
                                font=th.mono(12))
         self.meta_r.pack(side="right")
 
-        self.tape = th.TapeStrip(self, width=72, bg=th.CARD)
-        self.tape.place(x=18, y=-9, anchor="nw")
-
         self._widgets = [self, self.head, self.name, self.key, self.foot,
-                         self.meta_l, self.meta_r, self.tape]
+                         self.meta_l, self.meta_r]
         self._bind_all()
 
     # -- interaction ------------------------------------------------
@@ -113,7 +110,7 @@ class MealCard(tk.Frame):
             return
         e = mc.peek_day(self.date)
         mc.toggle_meal(self.date, self.meal, not e.get(self.meal, False))
-        self.app.refresh_all()
+        self.app.refresh_active()
         self.pulse()
 
     def pulse(self):
@@ -283,9 +280,6 @@ class MealApp(tk.Tk):
         self.mast_ed = th.Stamp(right, height=40, bg=th.PAPER,
                                 font=("Outfit", 11, "bold"))
         self.mast_ed.pack(anchor="e", pady=(6, 0))
-        self.ed_tape = th.TapeStrip(self.mast_ed, width=46, height=14,
-                                    bg=th.PAPER)
-        self.ed_tape.place(relx=0.5, y=-6, anchor="n")
 
         # -- views
         self.views = {}
@@ -335,7 +329,7 @@ class MealApp(tk.Tk):
             lbl.configure(fg=th.INK if active else th.PENCIL)
             underline.configure(bg=th.STAMP if active else th.PAPER)
         self.detail_mode = (name == "LOG / EDIT")
-        self.refresh_all()
+        self.refresh_active()
 
     # ------------------------------------------------------------ TODAY
     def _build_today(self, parent):
@@ -359,7 +353,7 @@ class MealApp(tk.Tk):
             if meal == "dinner" and now.weekday() == 5:
                 continue
             mc.toggle_meal(now, meal, value)
-        self.refresh_all()
+        self.refresh_active()
         if value:
             for card in self.today_cards.cards.values():
                 card.pulse()
@@ -402,14 +396,17 @@ class MealApp(tk.Tk):
         self.hist_thread.pack(side="left", fill="y")
         self.hist_list = tk.Frame(self.hist_inner, bg=th.PAPER)
         self.hist_list.pack(side="left", fill="x", expand=True)
+        self._hist_rows = {}
+        self._hist_keys = []
+        self._hist_div = None
 
     def _step(self, delta):
         self.log_date += timedelta(days=delta)
-        self.refresh_all()
+        self.refresh_active()
 
     def _jump_today(self):
         self.log_date = mc.today()
-        self.refresh_all()
+        self.refresh_active()
 
     def _key_meal(self, meal):
         if self.active_view == "TODAY":
@@ -422,7 +419,7 @@ class MealApp(tk.Tk):
             return
         e = mc.peek_day(d)
         mc.toggle_meal(d, meal, not e.get(meal, False))
-        self.refresh_all()
+        self.refresh_active()
         cards = (self.today_cards if self.active_view == "TODAY"
                  else self.log_cards).cards.get(meal)
         if cards is not None:
@@ -503,17 +500,38 @@ class MealApp(tk.Tk):
 
     # ---------------------------------------------------------- refresh
     def refresh_all(self):
+        """Full pass, used once at startup. After that only the chrome
+        plus the visible view refresh, so switching tabs or stamping a
+        meal never rebuilds the whole window."""
+        self.refresh_chrome()
+        self.refresh_today()
+        self.refresh_log()
+        self.refresh_insights()
+
+    def refresh_active(self):
+        """Minimal refresh after a change: chrome plus the visible view."""
+        self.refresh_chrome()
+        {"TODAY": self.refresh_today,
+         "LOG / EDIT": self.refresh_log,
+         "INSIGHTS": self.refresh_insights}[self.active_view]()
+
+    def _cycle_facts(self):
         now = mc.today()
-        self.detail_mode = (self.active_view == "LOG / EDIT")
         cs = mc.cycle_start(now)
         ce = mc.cycle_end(now)
+        a = mc.allowance_status()
+        b = mc.bill_between(cs, ce)
+        return now, cs, ce, a, b
+
+    def refresh_chrome(self):
+        """Masthead + footer: today and cycle facts. Configure-only, so
+        it never flickers."""
+        now, cs, ce, a, b = self._cycle_facts()
+        self.detail_mode = (self.active_view == "LOG / EDIT")
         day_no = (now - cs).days + 1
         total_days = mc.cycle_days(now)
         batch = mc.batch_of(now)
         ed = cycle_edition(cs)
-
-        a = mc.allowance_status()
-        b = mc.bill_between(cs, ce)
         over = a["over"] > 0
 
         # entry masthead always shows today
@@ -531,14 +549,6 @@ class MealApp(tk.Tk):
         self.mast_datestamp.set(now.strftime("%d %b %Y").upper(), "edition")
         self.mast_ed.set(f"CYCLE No. {ed:02d}", "edition")
 
-        # TODAY
-        self.today_cards.set_day(now)
-        today_e = mc.peek_day(now)
-        today_bill, _ = mc.day_bill(today_e, now)
-        self.today_sum.configure(
-            text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
-                 f"{rupees(today_bill)}")
-
         self.footer_left.configure(
             text=(f"Cycle {cs.strftime('%d %b')} \u2013 "
                   f"{ce.strftime('%d %b')}  \u00b7  "
@@ -551,7 +561,16 @@ class MealApp(tk.Tk):
         self.footer_right.configure(
             text=f"p. {day_no:02d}   \u00b7   B / L / D TO LOG")
 
-        # LOG / EDIT
+    def refresh_today(self):
+        now = mc.today()
+        self.today_cards.set_day(now)
+        today_e = mc.peek_day(now)
+        today_bill, _ = mc.day_bill(today_e, now)
+        self.today_sum.configure(
+            text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
+                 f"{rupees(today_bill)}")
+
+    def refresh_log(self):
         self.log_cards.set_day(self.log_date)
         log_e = mc.peek_day(self.log_date)
         log_bill, _ = mc.day_bill(log_e, self.log_date)
@@ -562,18 +581,18 @@ class MealApp(tk.Tk):
                  f"\u00b7  {rupees(log_bill)}")
         self.log_seal.set(day_complete(self.log_date, log_e))
         self._fill_history()
+        self.after_idle(self.hist_scroll.refresh)
 
-        # INSIGHTS
+    def refresh_insights(self):
+        now = mc.today()
+        a = mc.allowance_status()
         self._fill_insights(now, a)
-
-        for sf in (getattr(self, "hist_scroll", None),
-                   getattr(self, "ins_scroll", None)):
-            if sf is not None:
-                self.after_idle(sf.refresh)
+        self.after_idle(self.ins_scroll.refresh)
 
     def _fill_history(self):
-        for w in self.hist_list.winfo_children():
-            w.destroy()
+        """Leaves persist across refreshes and are repainted in place;
+        widgets are only rebuilt when the date range itself changes, so
+        stamping a meal never flashes the list."""
         now = mc.today()
         cs = mc.cycle_start(now)
         ce = mc.cycle_end(now)
@@ -582,115 +601,141 @@ class MealApp(tk.Tk):
 
         view_start = cs - timedelta(days=2)
         today_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        rows = []
-        for d, e in mc.entries_between(view_start, min(ce, today_day)):
-            if d == cs:
-                div = tk.Label(self.hist_list, bg=th.PAPER, fg=th.PENCIL,
-                               font=th.mono(10), anchor="w",
-                               text=f"\u2014 {cs.strftime('%d %b')}: "
-                                    f"the cycle opens \u2014")
-                div.pack(fill="x", pady=8)
-            prev_cycle = d < cs
-            bill, _ = mc.day_bill(e, d)
-            if d.weekday() == 5:
-                marks = ((e.get("breakfast") if e else False),
-                         (e.get("lunch") if e else False), "na")
-            else:
-                marks = tuple(bool(e.get(m)) if e else False
-                              for m in mc.MEALS)
-            total = f"{e['meals_counted']:g} meals" if e else "0.0 meals"
-            complete = day_complete(d, e)
-            is_today = mc._date_key(d) == mc._date_key(now)
-            selected = mc._date_key(d) == mc._date_key(self.log_date)
-            tag = ""
-            if prev_cycle:
-                tag = "(Previous Cycle)"
-            elif selected:
-                tag = "< selected"
-            row = tk.Frame(self.hist_list, bg=th.PAPER, cursor="hand2")
-            row.pack(fill="x", pady=1)
-            marker = tk.Frame(row, bg=th.PAPER, width=2, bd=0)
-            marker.pack(side="left", fill="y")
-
-            def _pick(dd=d):
-                self.log_date = dd
-                self.refresh_all()
-
-            base = th.INK if not prev_cycle else th.PENCIL
-            l1 = tk.Label(row, text=d.strftime("%d %b"), width=7, anchor="w",
-                          bg=th.PAPER, fg=base, font=th.mono(11))
-            l1.pack(side="left")
-            l2 = tk.Label(row, text=DOW3[d.weekday()], width=5, anchor="w",
-                          bg=th.PAPER, fg=th.INK_SOFT, font=th.mono(11))
-            l2.pack(side="left")
-            mk = th.MarksCanvas(row, bg=th.PAPER)
-            mk.pack(side="left", padx=(4, 2))
-            mk.set(*[("yes" if m is True else ("na" if m == "na" else "no"))
-                     for m in marks], dim=prev_cycle)
-            l4 = tk.Label(row, text=total, width=10, anchor="w",
-                          bg=th.PAPER, fg=base, font=th.mono(11))
-            l4.pack(side="left")
-            l5 = tk.Label(row, text=rupees(bill), width=10, anchor="w",
-                          bg=th.PAPER, fg=base, font=th.mono(11))
-            l5.pack(side="left")
-            l6 = tk.Label(row, text=tag, anchor="w", bg=th.PAPER,
-                          fg=th.STAMP if selected else th.PENCIL,
-                          font=th.mono(11))
-            l6.pack(side="left")
-            seal = th.Seal(row, bg=th.PAPER)
-            seal.pack(side="left", padx=(4, 8))
-            seal.set(complete)
-            cells = [l1, l2, l4, l5, l6, seal]
-            if selected:
-                marker.configure(bg=th.INK)
-                row.configure(bg=th.CARD)
-                mk.configure(bg=th.CARD)
-                for c in cells:
-                    c.configure(bg=th.CARD)
-
-            def _enter(ev=None, r=row, cs_=cells, m=marker, sel=selected,
-                       mc_=mk):
-                bg = th.CARD if sel else th.CARD_HI
-                r.configure(bg=bg)
-                mc_.configure(bg=bg)
-                for c in cs_:
-                    c.configure(bg=bg)
-                if not sel:
-                    m.configure(bg=th.RULE_DK)
-
-            def _leave(ev=None, r=row, cs_=cells, m=marker, sel=selected,
-                       mc_=mk):
-                bg = th.CARD if sel else th.PAPER
-                r.configure(bg=bg)
-                mc_.configure(bg=bg)
-                for c in cs_:
-                    c.configure(bg=bg)
-                if not sel:
-                    m.configure(bg=th.PAPER)
-
-            for w in [row] + cells:
-                w.bind("<Button-1>", lambda e, dd=d: _pick(dd))
-                w.bind("<Enter>", _enter)
-                w.bind("<Leave>", _leave)
-            mk.bind("<Button-1>", lambda e, dd=d: _pick(dd))
-            mk.bind("<Enter>", _enter)
-            mk.bind("<Leave>", _leave)
-            seal.bind("<Button-1>", lambda e, dd=d: _pick(dd))
-            seal.bind("<Enter>", _enter)
-            seal.bind("<Leave>", _leave)
-            kind = ("selected" if selected
-                    else ("prev" if prev_cycle
-                          else ("done" if complete else "open")))
-            rows.append((row, kind, is_today))
+        dates = [d for d, _ in mc.entries_between(view_start,
+                                                  min(ce, today_day))]
+        keys = [mc._date_key(d) for d in dates]
+        if keys != self._hist_keys:
+            self._rebuild_history(dates, cs)
+        for key in keys:
+            self._paint_hist_row(key)
         self.hist_list.update_idletasks()
         knots = []
-        for row, kind, is_today in rows:
+        for key in keys:
+            h = self._hist_rows[key]
             try:
-                y = row.winfo_y() + row.winfo_height() // 2
+                y = h["row"].winfo_y() + h["row"].winfo_height() // 2
             except Exception:
                 continue
-            knots.append((y, kind, is_today))
+            knots.append((y, h["kind"], h["is_today"]))
         self.hist_thread.set_knots(knots)
+
+    def _rebuild_history(self, dates, cs):
+        for w in self.hist_list.winfo_children():
+            w.destroy()
+        self._hist_rows = {}
+        self._hist_div = None
+        for d in dates:
+            if d == cs:
+                self._hist_div = tk.Label(
+                    self.hist_list, bg=th.PAPER, fg=th.PENCIL,
+                    font=th.mono(10), anchor="w",
+                    text=f"\u2014 {cs.strftime('%d %b')}: "
+                         f"the cycle opens \u2014")
+                self._hist_div.pack(fill="x", pady=8)
+            self._make_hist_row(d)
+        self._hist_keys = [mc._date_key(d) for d in dates]
+
+    def _make_hist_row(self, d):
+        key = mc._date_key(d)
+        row = tk.Frame(self.hist_list, bg=th.PAPER, cursor="hand2")
+        row.pack(fill="x", pady=1)
+        marker = tk.Frame(row, bg=th.PAPER, width=2, bd=0)
+        marker.pack(side="left", fill="y")
+
+        def _pick(dd=d):
+            self.log_date = dd
+            self.refresh_active()
+
+        h = {"key": key, "date": d, "row": row, "marker": marker,
+             "selected": False, "kind": "open", "is_today": False}
+        h["l1"] = tk.Label(row, text="", width=7, anchor="w",
+                            bg=th.PAPER, font=th.mono(11))
+        h["l1"].pack(side="left")
+        h["l2"] = tk.Label(row, text=DOW3[d.weekday()], width=5, anchor="w",
+                            bg=th.PAPER, fg=th.INK_SOFT, font=th.mono(11))
+        h["l2"].pack(side="left")
+        h["mk"] = th.MarksCanvas(row, bg=th.PAPER)
+        h["mk"].pack(side="left", padx=(4, 2))
+        for tag in ("l4", "l5", "l6"):
+            h[tag] = tk.Label(row, text="", anchor="w", bg=th.PAPER,
+                              font=th.mono(11),
+                              width=10 if tag != "l6" else 0)
+            h[tag].pack(side="left")
+        h["seal"] = th.Seal(row, bg=th.PAPER)
+        h["seal"].pack(side="left", padx=(4, 8))
+        h["cells"] = [h["l1"], h["l2"], h["l4"], h["l5"], h["l6"], h["seal"]]
+
+        def _enter(ev=None, h=h):
+            bg = th.CARD if h["selected"] else th.CARD_HI
+            h["row"].configure(bg=bg)
+            h["mk"].configure(bg=bg)
+            for c in h["cells"]:
+                c.configure(bg=bg)
+            if not h["selected"]:
+                h["marker"].configure(bg=th.RULE_DK)
+
+        def _leave(ev=None, h=h):
+            bg = th.CARD if h["selected"] else th.PAPER
+            h["row"].configure(bg=bg)
+            h["mk"].configure(bg=bg)
+            for c in h["cells"]:
+                c.configure(bg=bg)
+            if not h["selected"]:
+                h["marker"].configure(bg=th.PAPER)
+
+        for w in [row] + h["cells"]:
+            w.bind("<Button-1>", lambda e, dd=d: _pick(dd))
+            w.bind("<Enter>", _enter)
+            w.bind("<Leave>", _leave)
+        h["mk"].bind("<Button-1>", lambda e, dd=d: _pick(dd))
+        h["mk"].bind("<Enter>", _enter)
+        h["mk"].bind("<Leave>", _leave)
+        h["seal"].bind("<Button-1>", lambda e, dd=d: _pick(dd))
+        h["seal"].bind("<Enter>", _enter)
+        h["seal"].bind("<Leave>", _leave)
+        self._hist_rows[key] = h
+
+    def _paint_hist_row(self, key):
+        h = self._hist_rows[key]
+        d = h["date"]
+        now = mc.today()
+        cs = mc.cycle_start(now)
+        e = mc.peek_day(d)
+        prev_cycle = d < cs
+        bill, _ = mc.day_bill(e, d)
+        if d.weekday() == 5:
+            marks = ((e.get("breakfast") if e else False),
+                     (e.get("lunch") if e else False), "na")
+        else:
+            marks = tuple(bool(e.get(m)) if e else False for m in mc.MEALS)
+        complete = day_complete(d, e)
+        h["is_today"] = mc._date_key(d) == mc._date_key(now)
+        h["selected"] = mc._date_key(d) == mc._date_key(self.log_date)
+        h["kind"] = ("selected" if h["selected"]
+                     else ("prev" if prev_cycle
+                           else ("done" if complete else "open")))
+        base = th.INK if not prev_cycle else th.PENCIL
+        h["l1"].configure(text=d.strftime("%d %b"), fg=base)
+        h["mk"].set(*[("yes" if m is True else ("na" if m == "na" else "no"))
+                      for m in marks], dim=prev_cycle)
+        h["l4"].configure(
+            text=f"{e['meals_counted']:g} meals" if e else "0.0 meals",
+            fg=base)
+        h["l5"].configure(text=rupees(bill), fg=base)
+        tag = ""
+        if prev_cycle:
+            tag = "(Previous Cycle)"
+        elif h["selected"]:
+            tag = "< selected"
+        h["l6"].configure(text=tag,
+                           fg=th.STAMP if h["selected"] else th.PENCIL)
+        h["seal"].set(complete)
+        bg = th.CARD if h["selected"] else th.PAPER
+        h["row"].configure(bg=bg)
+        h["mk"].configure(bg=bg)
+        for c in h["cells"]:
+            c.configure(bg=bg)
+        h["marker"].configure(bg=th.INK if h["selected"] else th.PAPER)
 
     def _fill_insights(self, now, a):
         cs = mc.cycle_start(now)

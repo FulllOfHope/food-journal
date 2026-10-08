@@ -355,6 +355,7 @@ class Stamp(tk.Canvas):
         self._text = ""
         self._kind = "eaten"
         self._job = None
+        self._fonts = {}
 
     def set(self, text, kind="eaten"):
         self._cancel()
@@ -405,9 +406,14 @@ class Stamp(tk.Canvas):
             self._job = None
 
     def _scaled_font(self, scale):
-        spec = (self._spec[0], max(6, int(round(self._base_size * scale)))
-                ) + tuple(self._spec[2:])
-        return tkfont.Font(font=spec)
+        # Cache per size: minting a font object every animation frame
+        # stutters the strike.
+        size = max(6, int(round(self._base_size * scale)))
+        font = self._fonts.get(size)
+        if font is None:
+            spec = (self._spec[0], size) + tuple(self._spec[2:])
+            font = self._fonts[size] = tkfont.Font(font=spec)
+        return font
 
     def _measure(self, scale):
         font = self._scaled_font(scale)
@@ -589,27 +595,6 @@ class Seal(tk.Canvas):
         self.create_oval(5, 6, s - 5, s - 4, outline=STAMP, width=1)
         self.create_line(s * 0.32, s * 0.54, s * 0.46, s * 0.68,
                          s * 0.70, s * 0.34, fill=STAMP, width=2)
-
-
-# ------------------------------------------------------- washi tape
-class TapeStrip(tk.Canvas):
-    """A torn washi-tape strip pinning a sheet down. The stippled fill
-    reads as translucent stock over the paper, with fibre threads."""
-
-    def __init__(self, master, width=72, height=20, bg=CARD,
-                 color="#c9ad7c", **kw):
-        super().__init__(master, width=width, height=height, bg=bg,
-                         highlightthickness=0, bd=0, **kw)
-        edge = lerp_hex(color, "#000000", 0.3)
-        w, h = width, height
-        self.create_polygon([(0, h), (0, 8), (10, 0), (w - 10, 0), (w, 8),
-                             (w, h)],
-                            fill=color, outline=edge, width=1,
-                            stipple="gray25")
-        self.create_line(8, h - 5, w - 8, 5, fill=edge, width=1,
-                         dash=(3, 2))
-        self.create_line(8, h - 9, w - 8, 1, fill=edge, width=1,
-                         dash=(2, 3))
 
 
 # ------------------------------------------------------- scroll frame

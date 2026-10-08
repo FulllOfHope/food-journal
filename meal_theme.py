@@ -400,18 +400,39 @@ def bake_scrim(img, top_a=46, bot_a=120):
     return Image.composite(layer, img, mask)
 
 
-def feather_bottom(img, px=56):
-    """Melt the banner's lower edge into the paper instead of ending in
-    a hard photographic line."""
+def feather_edges(img, top=30, bottom=56):
+    """Melt the banner's edges into the paper instead of ending in hard
+    photographic lines."""
     w, h = img.size
     mask = Image.new("L", (1, h), 255)
     mp = mask.load()
     for y in range(h):
-        if y >= h - px:
-            mp[0, y] = int(255 * (h - 1 - y) / max(1, px - 1))
+        if y < top:
+            mp[0, y] = int(255 * y / max(1, top))
+        elif y >= h - bottom:
+            mp[0, y] = int(255 * (h - 1 - y) / max(1, bottom - 1))
     img = img.convert("RGBA")
     img.putalpha(mask.resize((w, h)))
     return img
+
+
+def procedural_banner(w, h, seed=7):
+    """Warm abstract wash when a slot has no photo: marigold and olive
+    drifts on cream, so the page is designed even bare."""
+    import random as _random
+    rng = _random.Random(seed)
+    img = Image.new("RGB", (w, h), PAPER_RGB)
+    from PIL import ImageDraw as _D
+    layer = Image.new("RGB", (w, h), PAPER_RGB)
+    dd = _D.Draw(layer)
+    tones = [(217, 164, 65), (138, 154, 74), (179, 64, 46), (201, 173, 124)]
+    for _ in range(7):
+        cx, cy = rng.uniform(0, w), rng.uniform(0, h)
+        rx, ry = rng.uniform(w * 0.08, w * 0.30), rng.uniform(h * 0.2, h * 0.9)
+        dd.ellipse((cx - rx, cy - ry, cx + rx, cy + ry),
+                   fill=tones[_ % len(tones)])
+    layer = layer.filter(ImageFilter.GaussianBlur(max(8, w // 28)))
+    return Image.blend(img, layer, 0.55)
 
 
 def wash_cover(path, w, h, anchor, strength):
@@ -429,12 +450,13 @@ class PhotoBanner(tk.Canvas):
     Without art (or PIL) it falls back to plain paper and ink type."""
 
     def __init__(self, master, height=168, photo=None, anchor=0.0,
-                 bg=PAPER, strength=1.0, **kw):
+                 bg=PAPER, strength=1.0, seed=7, **kw):
         super().__init__(master, height=height, bg=bg, highlightthickness=0,
                          bd=0, **kw)
         self._photo = photo
         self._anchor = anchor
         self._strength = strength
+        self._seed = seed
         self._eb, self._title, self._note = "", "", ""
         self._img = None
         self._key = None
@@ -468,13 +490,17 @@ class PhotoBanner(tk.Canvas):
             key = (self._photo, w, h)
             if key != self._key:
                 try:
-                    img = Image.open(self._photo).convert("RGB")
-                    img = cover_fit(img, w, h, self._anchor)
-                    img = img.filter(ImageFilter.GaussianBlur(0.8))
-                    img = Image.blend(Image.new("RGB", img.size, PAPER_RGB),
-                                      img, 0.62)
+                    if self._photo:
+                        img = Image.open(self._photo).convert("RGB")
+                        img = cover_fit(img, w, h, self._anchor)
+                        img = img.filter(ImageFilter.GaussianBlur(0.8))
+                        img = Image.blend(Image.new("RGB", img.size,
+                                                    PAPER_RGB),
+                                          img, 0.62)
+                    else:
+                        img = procedural_banner(w, h, self._seed)
                     img = bake_scrim(img, top_a=70, bot_a=150)
-                    img = feather_bottom(img)
+                    img = feather_edges(img)
                     self._img = ImageTk.PhotoImage(img)
                     self._key = key
                 except Exception:
@@ -851,6 +877,59 @@ class Medallion(tk.Label):
 
 
 # ------------------------------------------------------- scroll frame
+_HOVER_CANVASES = []
+_HOVER_BOUND = []
+
+
+def _hover_scroll_target(widget):
+    """Innermost registered scroll canvas under the pointer, if any."""
+    try:
+        w = widget.winfo_containing(widget.winfo_pointerx(),
+                                    widget.winfo_pointery())
+    except Exception:
+        return None
+    while w is not None:
+        if w in _HOVER_CANVASES:
+            return w
+        w = getattr(w, "master", None)
+    return None
+
+
+def _hover_scroll(event):
+    canvas = _hover_scroll_target(event.widget)
+    if canvas is None:
+        return None
+    try:
+        tall = canvas.winfo_height() < canvas.inner.winfo_reqheight()
+    except Exception:
+        return None
+    if not tall:
+        return None
+    if getattr(event, "num", 0) == 4:
+        steps = -2
+    elif getattr(event, "num", 0) == 5:
+        steps = 2
+    else:
+        delta = getattr(event, "delta", 0) or 0
+        steps = -2 if delta > 0 else 2
+    try:
+        canvas.yview_scroll(steps, "units")
+    except Exception:
+        return None
+    return "break"
+
+
+def register_hover_scroll(frame):
+    """Route the wheel to this frame's canvas whenever the pointer is
+    anywhere over it - no scrollbar grabbing, no clicking first."""
+    _HOVER_CANVASES.append(frame.canvas)
+    if not _HOVER_BOUND:
+        _HOVER_BOUND.append(True)
+        frame.canvas.bind_all("<Button-4>", _hover_scroll, add="+")
+        frame.canvas.bind_all("<Button-5>", _hover_scroll, add="+")
+        frame.canvas.bind_all("<MouseWheel>", _hover_scroll, add="+")
+
+
 class ScrollFrame(tk.Frame):
     """Vertically scrollable container."""
 
@@ -868,8 +947,10 @@ class ScrollFrame(tk.Frame):
         self._win_h = None
         self.canvas.configure(yscrollcommand=self._on_scroll)
         self.canvas.pack(side="left", fill="both", expand=True)
+        self.canvas.inner = self.inner
         self.inner.bind("<Configure>", self._on_inner)
         self.canvas.bind("<Configure>", self._on_canvas)
+        register_hover_scroll(self)
 
     def _on_scroll(self, first, last):
         try:

@@ -288,30 +288,14 @@ class MealApp(tk.Tk):
         self.banners = {
             "TODAY": th.PhotoBanner(self.paper, height=168,
                                     photo=th.art("today.jpg", "bg.jpg"),
-                                    anchor=0.15),
+                                    anchor=0.15, seed=11),
             "LOG / EDIT": th.PhotoBanner(self.paper, height=168,
                                          photo=th.art("log.jpg", "bg.jpg"),
-                                         anchor=0.5),
+                                         anchor=0.5, seed=22),
             "INSIGHTS": th.PhotoBanner(self.paper, height=168,
                                        photo=th.art("insights.jpg", "bg.jpg"),
-                                       anchor=0.85),
+                                       anchor=0.85, seed=33),
         }
-
-        # -- sticker strip: the day's stamps stacked at the right,
-        # the way a masthead margin should read
-        strip = tk.Frame(self.paper, bg=th.PAPER)
-        strip.pack(fill="x", padx=GUTTER, pady=(14, 0))
-        right = tk.Frame(strip, bg=th.PAPER)
-        right.pack(side="right")
-        self.mast_folio = tk.Label(right, bg=th.PAPER, fg=th.PENCIL,
-                                   font=th.mono(12), anchor="e")
-        self.mast_folio.pack(anchor="e")
-        self.mast_datestamp = th.Stamp(right, height=38, bg=th.PAPER,
-                                       font=("Outfit", 11, "bold"))
-        self.mast_datestamp.pack(anchor="e", pady=(6, 0))
-        self.mast_ed = th.Stamp(right, height=38, bg=th.PAPER,
-                                font=("Outfit", 11, "bold"))
-        self.mast_ed.pack(anchor="e", pady=(6, 0))
 
         # -- views
         self.views = {}
@@ -358,7 +342,7 @@ class MealApp(tk.Tk):
                 f.pack_forget()
         for n, b in self.banners.items():
             if n == name:
-                b.pack(fill="x", before=self.views[name])
+                b.pack(fill="x", padx=GUTTER, before=self.views[name])
             else:
                 b.pack_forget()
         for n, (holder, lbl, underline) in self.tab_ui.items():
@@ -570,7 +554,6 @@ class MealApp(tk.Tk):
         day_no = (now - cs).days + 1
         total_days = mc.cycle_days(now)
         batch = mc.batch_of(now)
-        ed = cycle_edition(cs)
         over = a["over"] > 0
 
         # TODAY banner over your photo + the sticker strip
@@ -582,9 +565,6 @@ class MealApp(tk.Tk):
                   if not over else
                   f"day {day_no} of {total_days} \u00b7 batch {batch} \u2014 "
                   f"over by {a['over']:g}, mind the stamp"))
-        self.mast_folio.configure(text=f"p. {day_no:02d}")
-        self.mast_datestamp.set(now.strftime("%d %b %Y").upper(), "edition")
-        self.mast_ed.set(f"CYCLE No. {ed:02d}", "edition")
 
         self.footer_left.configure(
             text=(f"Cycle {cs.strftime('%d %b')} \u2013 "

@@ -139,9 +139,15 @@ with a baked scrim under cream type:
 | File | Used for |
 |------|----------|
 | `today.jpg` | TODAY banner (top crop) |
-| `log.jpg` | LOG / EDIT banner (centre crop) |
+| `log.jpg` | LOG / EDIT banner (centre crop) + TODAY polaroid |
 | `insights.jpg` | INSIGHTS banner (bottom crop) |
 | `bg.jpg` | fallback for any missing banner + faint whole-page wash |
+| `extra-*.jpg` | small gallery prints in TODAY's empty stretch |
+
+Headings sit on paper beneath the photos, never overlaid, and prints
+always show the full image. The two `extra-grove-*` postcards are
+public-domain finds (Florida, 1925 and Ormond Beach, c.1905) via
+Wikimedia Commons.
 
 JPG or PNG, landscape works best. Without them (or without Pillow) the
 banners fall back to plain paper and ink, and nothing else changes.

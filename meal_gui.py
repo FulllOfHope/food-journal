@@ -352,8 +352,32 @@ class MealApp(tk.Tk):
         self.detail_mode = (name == "LOG / EDIT")
         self.refresh_active()
 
+    def _masthead(self, parent, prefix):
+        """Paper title block under the banner: eyebrow, Playfair date,
+        hand note left; folio right."""
+        mast = tk.Frame(parent, bg=th.PAPER)
+        mast.pack(fill="x", pady=(14, 0))
+        left = tk.Frame(mast, bg=th.PAPER)
+        left.pack(side="left")
+        eb = th.eyebrow(left, "")
+        eb.pack(anchor="w")
+        date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(30),
+                        anchor="w")
+        date.pack(anchor="w", pady=(2, 0))
+        note = tk.Label(left, bg=th.PAPER, fg=th.INK_SOFT, font=th.hand(16),
+                        anchor="w")
+        note.pack(anchor="w", pady=(2, 0))
+        folio = tk.Label(mast, bg=th.PAPER, fg=th.PENCIL, font=th.mono(12))
+        folio.pack(side="right", anchor="n")
+        setattr(self, prefix + "_eb", eb)
+        setattr(self, prefix + "_date", date)
+        setattr(self, prefix + "_note", note)
+        setattr(self, prefix + "_folio", folio)
+        return mast
+
     # ------------------------------------------------------------ TODAY
     def _build_today(self, parent):
+        self._masthead(parent, "today")
         self.today_cards = CardRow(parent, self)
         self.today_cards.pack(fill="x")
 
@@ -375,6 +399,14 @@ class MealApp(tk.Tk):
         if self.polaroid is not None:
             self.polaroid.place(relx=1.0, rely=1.0, anchor="se", x=-16,
                                 y=-8)
+        _g1, _g2 = th.art("extra-grove-fl.jpg"), th.art(
+            "extra-grove-ormond.jpg")
+        if _g1 and _g2:
+            gallery = tk.Frame(self.void, bg=th.PAPER)
+            gallery.place(relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
+            th.Polaroid(gallery, photo=_g1, width=168).pack(
+                side="left", padx=(0, 14))
+            th.Polaroid(gallery, photo=_g2, width=168).pack(side="left")
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -389,6 +421,7 @@ class MealApp(tk.Tk):
 
     # ---------------------------------------------------------- LOG/EDIT
     def _build_log(self, parent):
+        self._masthead(parent, "logm")
         nav = tk.Frame(parent, bg=th.PAPER)
         nav.pack(fill="x", pady=(0, 16))
         th.RoundedButton(nav, "< YESTERDAY", lambda: self._step(-1),
@@ -463,6 +496,7 @@ class MealApp(tk.Tk):
         body.pack(fill="both", expand=True)
         self.ins_body = body
 
+        self._masthead(body, "ins")
         allow_head = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
                               font=th.mono(10))
         allow_head.pack(anchor="w", pady=(2, 0))
@@ -556,15 +590,18 @@ class MealApp(tk.Tk):
         batch = mc.batch_of(now)
         over = a["over"] > 0
 
-        # TODAY banner over your photo + the sticker strip
-        self.banners["TODAY"].set(
-            eyebrow=f"ENTRY \u2014 {now.strftime('%A').upper()}",
-            title=now.strftime("%d %B %Y"),
-            note=(f"day {day_no} of {total_days} \u00b7 batch {batch} \u2014 "
-                  f"{a['remaining']:g} left in the pencil box"
+        # TODAY headings live on paper beneath the photo
+        self.today_eb.configure(
+            text=f"ENTRY \u2014 {now.strftime('%A').upper()}")
+        self.today_date.configure(text=now.strftime("%d %B %Y"))
+        self.today_note.configure(
+            text=(f"day {day_no} of {total_days} \u00b7 batch {batch} "
+                  f"\u2014 {a['remaining']:g} left in the pencil box"
                   if not over else
-                  f"day {day_no} of {total_days} \u00b7 batch {batch} \u2014 "
-                  f"over by {a['over']:g}, mind the stamp"))
+                  f"day {day_no} of {total_days} \u00b7 batch {batch} "
+                  f"\u2014 over by {a['over']:g}, mind the stamp"),
+            fg=th.INK_SOFT if not over else th.STAMP)
+        self.today_folio.configure(text=f"p. {day_no:02d}")
 
         self.footer_left.configure(
             text=(f"Cycle {cs.strftime('%d %b')} \u2013 "
@@ -595,11 +632,16 @@ class MealApp(tk.Tk):
         self.log_cards.set_day(self.log_date)
         log_e = mc.peek_day(self.log_date)
         log_bill, _ = mc.day_bill(log_e, self.log_date)
-        self.banners["LOG / EDIT"].set(
-            eyebrow=f"LEAF \u2014 {self.log_date.strftime('%A').upper()}",
-            title=self.log_date.strftime("%d %B %Y"),
-            note=(f"{log_e['meals_counted']:g} meals \u00b7 "
+        _now = mc.today()
+        _dno = (_now - mc.cycle_start(_now)).days + 1
+        self.logm_eb.configure(
+            text=f"LEAF \u2014 {self.log_date.strftime('%A').upper()}")
+        self.logm_date.configure(text=self.log_date.strftime("%d %B %Y"))
+        self.logm_note.configure(
+            text=(f"{log_e['meals_counted']:g} meals \u00b7 "
                   f"{rupees(log_bill)}"))
+        self.logm_folio.configure(
+            text=f"p. {_dno:02d}")
         self.log_title.configure(
             text=f"Day total \u2014 {log_e['meals_counted']:g} meals  "
                  f"\u00b7  {rupees(log_bill)}")
@@ -766,13 +808,17 @@ class MealApp(tk.Tk):
         ce = mc.cycle_end(now)
         over = a["over"] > 0
         day_no = (now - cs).days + 1
-        self.banners["INSIGHTS"].set(
-            eyebrow=(f"{cs.strftime('%B').upper()} CYCLE \u2014 "
-                     f"No. {cycle_edition(cs):02d}"),
-            title=(f"{cs.strftime('%d %b')} \u2013 "
-                   f"{ce.strftime('%d %b')}"),
-            note=(f"day {day_no} of {mc.cycle_days(now)} \u00b7 "
+        self.ins_eb.configure(
+            text=(f"{cs.strftime('%B').upper()} CYCLE \u2014 "
+                  f"No. {cycle_edition(cs):02d}"))
+        self.ins_date.configure(
+            text=(f"{cs.strftime('%d %b')} \u2013 "
+                  f"{ce.strftime('%d %b')}"))
+        self.ins_note.configure(
+            text=(f"day {day_no} of {mc.cycle_days(now)} \u00b7 "
                   f"batch {mc.batch_of(now)}"))
+        self.ins_folio.configure(
+            text=f"p. {day_no:02d}")
         self.ins_allow_head.configure(
             text=f"PENCIL BOX \u2014 {a['allowed']:g} MISSES ALLOWED")
         self.ins_allow_left.configure(

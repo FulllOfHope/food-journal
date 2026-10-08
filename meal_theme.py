@@ -365,13 +365,10 @@ class PaperCanvas(tk.Canvas):
 
 # ------------------------------------------------------- photo art
 PAPER_RGB = (244, 241, 234)
-CREAM = "#faf5e9"
-CREAM_DIM = "#e3d5b8"
-TYPE_SHADOW = "#2a1c0e"
 
 
 _CACHE_DIR = Path.home() / ".cache" / "mess-ledger" / "art"
-_ART_VERSION = 3  # bump whenever the art pipeline changes
+_ART_VERSION = 4  # bump whenever the art pipeline changes
 
 
 def _cache_path(key):
@@ -417,30 +414,6 @@ def cover_fit(img, w, h, anchor=0.5):
     x = max(0, (sw - w) // 2)
     y = max(0, int((sh - h) * min(1.0, max(0.0, anchor))))
     return img.crop((x, y, x + w, y + h))
-
-
-def bake_scrim(img, top_a=46, bot_a=120, plate_a=95, plate_w=0.55):
-    """Legibility scrim: shaded top, clear middle, dark base, plus a soft
-    dark plate down the left where the cream type always sits."""
-    w, h = img.size
-    sw, sh = max(1, w // 4), max(1, h // 4)
-    small = Image.new("L", (sw, sh))
-    px = small.load()
-    for yy in range(sh):
-        t = yy / max(1, sh - 1)
-        if t < 0.30:
-            vv = top_a * (1 - t / 0.30)
-        elif t < 0.55:
-            vv = 0
-        else:
-            vv = bot_a * (t - 0.55) / 0.45
-        for xx in range(sw):
-            u = xx / max(1, sw - 1)
-            hv = plate_a * max(0.0, 1 - u / plate_w) if u < plate_w else 0
-            px[xx, yy] = int(max(vv, hv))
-    mask = small.resize((w, h), Image.BILINEAR)
-    layer = Image.new("RGB", (w, h), (32, 20, 5))
-    return Image.composite(layer, img, mask)
 
 
 def feather_edges(img, top=30, bottom=56):
@@ -492,28 +465,22 @@ def wash_cover(path, w, h, anchor, strength):
 
 
 class PhotoBanner(tk.Canvas):
-    """Full-bleed photographic masthead: your artwork washed warm with a
-    baked scrim, cream serif title set over it with a printed shadow.
-    Without art (or PIL) it falls back to plain paper and ink type."""
+    """Full-bleed photographic masthead in original colour, melted into
+    the paper at the edges. Headings live on paper beneath it, so type
+    is always ink on paper and the photo is never muted for legibility.
+    Without art (or PIL) the band is plain paper."""
 
     def __init__(self, master, height=168, photo=None, anchor=0.0,
-                 bg=PAPER, strength=0.55, seed=7, **kw):
+                 bg=PAPER, seed=7, **kw):
         super().__init__(master, height=height, bg=bg, highlightthickness=0,
                          bd=0, **kw)
         self._photo = photo
         self._anchor = anchor
-        self._strength = strength
         self._seed = seed
-        self._eb, self._title, self._note = "", "", ""
         self._img = None
         self._key = None
         self._job = None
         self.bind("<Configure>", self._on_resize)
-
-    def set(self, eyebrow="", title="", note=""):
-        if (eyebrow, title, note) != (self._eb, self._title, self._note):
-            self._eb, self._title, self._note = eyebrow, title, note
-            self.redraw()
 
     def _on_resize(self, _e=None):
         if self._job is not None:
@@ -535,19 +502,13 @@ class PhotoBanner(tk.Canvas):
         photo = self._photo and _PIL
         if photo:
             key = (_ART_VERSION, "banner", self._photo,
-                   _file_stamp(self._photo), w, h, round(self._anchor, 3),
-                   self._strength)
+                   _file_stamp(self._photo), w, h, round(self._anchor, 3))
             if key != self._key:
                 try:
                     def build(w=w, h=h):
                         img = Image.open(self._photo).convert("RGB")
-                        img = cover_fit(img, w, h, self._anchor)
-                        img = img.filter(ImageFilter.GaussianBlur(0.8))
-                        img = Image.blend(Image.new("RGB", img.size,
-                                                    PAPER_RGB),
-                                          img, self._strength)
-                        img = bake_scrim(img, top_a=70, bot_a=150)
-                        return feather_edges(img)
+                        return feather_edges(cover_fit(img, w, h,
+                                                       self._anchor))
                     self._img = ImageTk.PhotoImage(cached_image(key, build))
                     self._key = key
                 except Exception:
@@ -558,9 +519,8 @@ class PhotoBanner(tk.Canvas):
             if key != self._key:
                 try:
                     def build(w=w, h=h):
-                        img = procedural_banner(w, h, self._seed)
-                        img = bake_scrim(img, top_a=40, bot_a=90)
-                        return feather_edges(img)
+                        return feather_edges(procedural_banner(w, h,
+                                                               self._seed))
                     self._img = ImageTk.PhotoImage(cached_image(key, build))
                     self._key = key
                 except Exception:
@@ -568,36 +528,6 @@ class PhotoBanner(tk.Canvas):
                     self._key = None
         if self._img is not None:
             self.create_image(0, 0, image=self._img, anchor="nw")
-        if photo and self._img is not None:
-            eb_fg, ti_fg, no_fg = CREAM_DIM, CREAM, CREAM_DIM
-            sh = TYPE_SHADOW
-            title_font, eb_font, no_font = display(34, "bold"), mono(11), \
-                body(13)
-        else:
-            eb_fg, ti_fg, no_fg = PENCIL, INK, INK_SOFT
-            sh = None
-            title_font, eb_font, no_font = display(34), mono(11), body(13)
-        x = 28
-        if sh:
-            for dx, dy in ((0, 2), (1, 1)):
-                self.create_text(x + dx, 28 + dy, anchor="w", text=self._eb,
-                                 fill=sh, font=eb_font)
-        self.create_text(x, 28, anchor="w", text=self._eb, fill=eb_fg,
-                         font=eb_font)
-        if sh:
-            for dx, dy in ((0, 2), (1, 1)):
-                self.create_text(x + dx, 82 + dy, anchor="w",
-                                 text=self._title, fill=sh,
-                                 font=title_font)
-        self.create_text(x, 82, anchor="w", text=self._title, fill=ti_fg,
-                         font=title_font)
-        if sh:
-            for dx, dy in ((0, 2), (1, 1)):
-                self.create_text(x + dx, 130 + dy, anchor="w",
-                                 text=self._note, fill=sh, font=no_font)
-        self.create_text(x, 130, anchor="w", text=self._note, fill=no_fg,
-                         font=no_font)
-
 
 # ------------------------------------------------------- rubber stamp
 STAMP_SLOPE = math.tan(math.radians(-4))
@@ -902,8 +832,13 @@ class Polaroid(tk.Frame):
             try:
                 img = Image.open(photo).convert("RGB")
                 side = width - 24
-                self._img = ImageTk.PhotoImage(cover_fit(img, side, side,
-                                                         0.4))
+                sw, sh = img.size
+                scale = min(side / max(1, sw), side / max(1, sh))
+                nw, nh = max(1, int(sw * scale)), max(1, int(sh * scale))
+                img = img.resize((nw, nh), Image.LANCZOS)
+                mat = Image.new("RGB", (side, side), (251, 247, 236))
+                mat.paste(img, ((side - nw) // 2, (side - nh) // 2))
+                self._img = ImageTk.PhotoImage(mat)
                 self._label.configure(image=self._img)
             except Exception:
                 self._label.configure(text="(photo missing)", fg=PENCIL)

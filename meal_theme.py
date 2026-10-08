@@ -9,7 +9,9 @@ to plain paper and ink.
 
 Domain rules and storage live in meal_common; this file is presentation.
 """
+import hashlib
 import math
+import os
 import random
 import tkinter as tk
 import tkinter.font as tkfont
@@ -368,6 +370,43 @@ CREAM_DIM = "#e3d5b8"
 TYPE_SHADOW = "#2a1c0e"
 
 
+_CACHE_DIR = Path.home() / ".cache" / "mess-ledger" / "art"
+_ART_VERSION = 3  # bump whenever the art pipeline changes
+
+
+def _cache_path(key):
+    digest = hashlib.sha1(repr(key).encode()).hexdigest()
+    return _CACHE_DIR / (digest + ".png")
+
+
+def cached_image(key, builder):
+    """Processed art, memoized on disk: repeat loads cost a PNG decode,
+    so banners appear instead of grinding through PIL each time."""
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        hit = _cache_path(key)
+        if hit.is_file():
+            img = Image.open(hit)
+            img.load()
+            return img
+    except Exception:
+        pass
+    img = builder()
+    try:
+        img.save(_cache_path(key))
+    except Exception:
+        pass
+    return img
+
+
+def _file_stamp(path):
+    try:
+        st = os.stat(path)
+        return (st.st_mtime, st.st_size)
+    except Exception:
+        return (0, 0)
+
+
 def cover_fit(img, w, h, anchor=0.5):
     """Scale img to cover (w, h), cropping with vertical anchor 0..1."""
     sw, sh = img.size
@@ -380,22 +419,26 @@ def cover_fit(img, w, h, anchor=0.5):
     return img.crop((x, y, x + w, y + h))
 
 
-def bake_scrim(img, top_a=46, bot_a=120):
-    """Bake a baked-in legibility scrim: shaded top, clear middle, dark
-    base for cream type to sit on."""
+def bake_scrim(img, top_a=46, bot_a=120, plate_a=95, plate_w=0.55):
+    """Legibility scrim: shaded top, clear middle, dark base, plus a soft
+    dark plate down the left where the cream type always sits."""
     w, h = img.size
-    mask = Image.new("L", (1, h))
-    px = mask.load()
-    for y in range(h):
-        t = y / max(1, h - 1)
+    sw, sh = max(1, w // 4), max(1, h // 4)
+    small = Image.new("L", (sw, sh))
+    px = small.load()
+    for yy in range(sh):
+        t = yy / max(1, sh - 1)
         if t < 0.30:
-            a = int(top_a * (1 - t / 0.30))
+            vv = top_a * (1 - t / 0.30)
         elif t < 0.55:
-            a = 0
+            vv = 0
         else:
-            a = int(bot_a * (t - 0.55) / 0.45)
-        px[0, y] = a
-    mask = mask.resize((w, h))
+            vv = bot_a * (t - 0.55) / 0.45
+        for xx in range(sw):
+            u = xx / max(1, sw - 1)
+            hv = plate_a * max(0.0, 1 - u / plate_w) if u < plate_w else 0
+            px[xx, yy] = int(max(vv, hv))
+    mask = small.resize((w, h), Image.BILINEAR)
     layer = Image.new("RGB", (w, h), (32, 20, 5))
     return Image.composite(layer, img, mask)
 
@@ -437,11 +480,15 @@ def procedural_banner(w, h, seed=7):
 
 def wash_cover(path, w, h, anchor, strength):
     """Your photo melted into the paper at low strength for backgrounds."""
-    img = Image.open(path).convert("RGB")
-    img = cover_fit(img, w, h, anchor)
-    img = img.filter(ImageFilter.GaussianBlur(1.2))
-    return ImageTk.PhotoImage(
-        Image.blend(Image.new("RGB", img.size, PAPER_RGB), img, strength))
+    def build():
+        img = Image.open(path).convert("RGB")
+        img = cover_fit(img, w, h, anchor)
+        img = img.filter(ImageFilter.GaussianBlur(1.2))
+        return Image.blend(Image.new("RGB", img.size, PAPER_RGB), img,
+                           strength)
+    key = (_ART_VERSION, "wash", path, _file_stamp(path), w, h,
+           round(anchor, 3), strength)
+    return ImageTk.PhotoImage(cached_image(key, build))
 
 
 class PhotoBanner(tk.Canvas):
@@ -450,7 +497,7 @@ class PhotoBanner(tk.Canvas):
     Without art (or PIL) it falls back to plain paper and ink type."""
 
     def __init__(self, master, height=168, photo=None, anchor=0.0,
-                 bg=PAPER, strength=1.0, seed=7, **kw):
+                 bg=PAPER, strength=0.55, seed=7, **kw):
         super().__init__(master, height=height, bg=bg, highlightthickness=0,
                          bd=0, **kw)
         self._photo = photo
@@ -487,27 +534,40 @@ class PhotoBanner(tk.Canvas):
             return
         photo = self._photo and _PIL
         if photo:
-            key = (self._photo, w, h)
+            key = (_ART_VERSION, "banner", self._photo,
+                   _file_stamp(self._photo), w, h, round(self._anchor, 3),
+                   self._strength)
             if key != self._key:
                 try:
-                    if self._photo:
+                    def build(w=w, h=h):
                         img = Image.open(self._photo).convert("RGB")
                         img = cover_fit(img, w, h, self._anchor)
                         img = img.filter(ImageFilter.GaussianBlur(0.8))
                         img = Image.blend(Image.new("RGB", img.size,
                                                     PAPER_RGB),
-                                          img, 0.62)
-                    else:
-                        img = procedural_banner(w, h, self._seed)
-                    img = bake_scrim(img, top_a=70, bot_a=150)
-                    img = feather_edges(img)
-                    self._img = ImageTk.PhotoImage(img)
+                                          img, self._strength)
+                        img = bake_scrim(img, top_a=70, bot_a=150)
+                        return feather_edges(img)
+                    self._img = ImageTk.PhotoImage(cached_image(key, build))
                     self._key = key
                 except Exception:
                     self._img = None
                     self._key = None
-            if self._img is not None:
-                self.create_image(0, 0, image=self._img, anchor="nw")
+        elif _PIL:
+            key = (_ART_VERSION, "procedural", w, h, self._seed)
+            if key != self._key:
+                try:
+                    def build(w=w, h=h):
+                        img = procedural_banner(w, h, self._seed)
+                        img = bake_scrim(img, top_a=40, bot_a=90)
+                        return feather_edges(img)
+                    self._img = ImageTk.PhotoImage(cached_image(key, build))
+                    self._key = key
+                except Exception:
+                    self._img = None
+                    self._key = None
+        if self._img is not None:
+            self.create_image(0, 0, image=self._img, anchor="nw")
         if photo and self._img is not None:
             eb_fg, ti_fg, no_fg = CREAM_DIM, CREAM, CREAM_DIM
             sh = TYPE_SHADOW
@@ -519,18 +579,22 @@ class PhotoBanner(tk.Canvas):
             title_font, eb_font, no_font = display(34), mono(11), body(13)
         x = 28
         if sh:
-            self.create_text(x, 30, anchor="w", text=self._eb, fill=sh,
-                             font=eb_font)
+            for dx, dy in ((0, 2), (1, 1)):
+                self.create_text(x + dx, 28 + dy, anchor="w", text=self._eb,
+                                 fill=sh, font=eb_font)
         self.create_text(x, 28, anchor="w", text=self._eb, fill=eb_fg,
                          font=eb_font)
         if sh:
-            self.create_text(x, 84, anchor="w", text=self._title, fill=sh,
-                             font=title_font)
+            for dx, dy in ((0, 2), (1, 1)):
+                self.create_text(x + dx, 82 + dy, anchor="w",
+                                 text=self._title, fill=sh,
+                                 font=title_font)
         self.create_text(x, 82, anchor="w", text=self._title, fill=ti_fg,
                          font=title_font)
         if sh:
-            self.create_text(x, 131, anchor="w", text=self._note, fill=sh,
-                             font=no_font)
+            for dx, dy in ((0, 2), (1, 1)):
+                self.create_text(x + dx, 130 + dy, anchor="w",
+                                 text=self._note, fill=sh, font=no_font)
         self.create_text(x, 130, anchor="w", text=self._note, fill=no_fg,
                          font=no_font)
 

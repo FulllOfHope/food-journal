@@ -85,8 +85,8 @@ class MealCard(tk.Frame):
                                font=th.mono(12))
         self.meta_r.pack(side="right")
 
-        self._widgets = [self, self.head, self.name, self.key, self.foot,
-                         self.meta_l, self.meta_r]
+        self._widgets = [self, self.head, self.name, self.key, self.stamp,
+                         self.rule, self.foot, self.meta_l, self.meta_r]
         self._bind_all()
 
     # -- interaction ------------------------------------------------

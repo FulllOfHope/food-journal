@@ -85,8 +85,11 @@ class MealCard(tk.Frame):
                                font=th.mono(12))
         self.meta_r.pack(side="right")
 
+        self.tape = th.TapeStrip(self, width=72, bg=th.CARD)
+        self.tape.place(x=18, y=-9, anchor="nw")
+
         self._widgets = [self, self.head, self.name, self.key, self.foot,
-                         self.meta_l, self.meta_r]
+                         self.meta_l, self.meta_r, self.tape]
         self._bind_all()
 
     # -- interaction ------------------------------------------------
@@ -274,9 +277,15 @@ class MealApp(tk.Tk):
         self.mast_folio = tk.Label(right, bg=th.PAPER, fg=th.PENCIL,
                                    font=th.mono(12), anchor="e")
         self.mast_folio.pack(anchor="e")
+        self.mast_datestamp = th.Stamp(right, height=36, bg=th.PAPER,
+                                       font=("Outfit", 10, "bold"))
+        self.mast_datestamp.pack(anchor="e", pady=(8, 0))
         self.mast_ed = th.Stamp(right, height=40, bg=th.PAPER,
                                 font=("Outfit", 11, "bold"))
-        self.mast_ed.pack(anchor="e", pady=(8, 0))
+        self.mast_ed.pack(anchor="e", pady=(6, 0))
+        self.ed_tape = th.TapeStrip(self.mast_ed, width=46, height=14,
+                                    bg=th.PAPER)
+        self.ed_tape.place(relx=0.5, y=-6, anchor="n")
 
         # -- views
         self.views = {}
@@ -519,6 +528,7 @@ class MealApp(tk.Tk):
                   f"\u2014 over by {a['over']:g}, mind the stamp"),
             fg=th.INK_SOFT if not over else th.STAMP)
         self.mast_folio.configure(text=f"p. {day_no:02d}")
+        self.mast_datestamp.set(now.strftime("%d %b %Y").upper(), "edition")
         self.mast_ed.set(f"CYCLE No. {ed:02d}", "edition")
 
         # TODAY

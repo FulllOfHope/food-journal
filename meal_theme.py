@@ -171,8 +171,8 @@ def label(parent, text="", fg=INK, bg=CARD, font=None, anchor="w", **kw):
 
 
 def eyebrow(parent, text, bg=PAPER, fg=PENCIL):
-    """Hand-lettered section kicker, e.g. 'ENTRY - SUNDAY'."""
-    return tk.Label(parent, text=text, bg=bg, fg=fg, font=hand(14),
+    """Small-caps section kicker, e.g. 'ENTRY - SUNDAY'."""
+    return tk.Label(parent, text=text, bg=bg, fg=fg, font=mono(10),
                     anchor="w")
 
 
@@ -197,7 +197,7 @@ def button(parent, text, command, kind="ghost", bg=None, font=None,
         idle, idle_fg, holder_bg = bg, INK_SOFT, RULE_DK
     holder = tk.Frame(parent, bg=holder_bg, bd=0, highlightthickness=0)
     lbl = tk.Label(holder, text=text, bg=idle, fg=idle_fg,
-                   font=font or hand(14, "bold"), padx=padx, pady=pady,
+                   font=font or mono(10), padx=padx, pady=pady,
                    cursor="hand2")
     lbl.pack(padx=1, pady=1)
 
@@ -589,65 +589,6 @@ class Seal(tk.Canvas):
         self.create_oval(5, 6, s - 5, s - 4, outline=STAMP, width=1)
         self.create_line(s * 0.32, s * 0.54, s * 0.46, s * 0.68,
                          s * 0.70, s * 0.34, fill=STAMP, width=2)
-
-
-# ------------------------------------------------------- page turn
-class PageTurn:
-    """A page-flip wipe: a blank sheet sweeps across a container,
-    revealing the freshly swapped content beneath it.
-
-    Slow eased travel with a shaded curl edge, so it reads as paper
-    turning rather than a UI flicker."""
-
-    _busy = False
-
-    @classmethod
-    def play(cls, parent, box, direction=+1, ms=480):
-        if cls._busy:
-            return
-        x, y, w, h = box
-        if w < 50 or h < 50:
-            return
-        try:
-            cover = tk.Frame(parent, bg="#e7e0cf", bd=0)
-            edge = tk.Frame(cover, bg=RULE_DK, width=2, bd=0)
-            shade = tk.Frame(cover, bg="#d9d0ba", width=12, bd=0)
-            if direction > 0:
-                edge.pack(side="left", fill="y")
-                shade.pack(side="left", fill="y")
-            else:
-                edge.pack(side="right", fill="y")
-                shade.pack(side="right", fill="y")
-            cover.place(x=x, y=y, width=w, height=h)
-        except Exception:
-            return
-        cls._busy = True
-        steps = 12  # fewer, meatier repaints: cheaper than many small ones
-        interval = max(15, ms // steps)
-
-        def move(i=0):
-            try:
-                if i >= steps or not cover.winfo_exists():
-                    raise StopIteration
-                t = (i + 1) / steps
-                eased = t * t * (3 - 2 * t)  # smoothstep: lift, whip, settle
-                nx = x - direction * int(w * eased)
-                cover.place(x=nx, y=y, width=w, height=h)
-                cover.after(interval, lambda: move(i + 1))
-            except StopIteration:
-                try:
-                    cover.destroy()
-                except Exception:
-                    pass
-                cls._busy = False
-            except Exception:
-                try:
-                    cover.destroy()
-                except Exception:
-                    pass
-                cls._busy = False
-
-        move()
 
 
 # ------------------------------------------------------- scroll frame

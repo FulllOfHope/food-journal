@@ -6,7 +6,6 @@ to integers and no anti-aliasing is used anywhere, which keeps everything
 axis-aligned and crisp.
 """
 import math
-import random
 import tkinter as tk
 
 import meal_theme as th
@@ -185,36 +184,52 @@ class BarChart(Chart):
                                  fill=th.TEXT_MUTE, font=th.mono(8))
 
 
-class SketchBars(Chart):
-    """Hand-ruled bars for the journal: wobbly triple-stroke columns with
-    sketch-ring caps, Caveat ticks and day labels on graph paper.
+class PinThread(Chart):
+    """Pinboard rhythm for the journal: a red map-pin per logged day,
+    joined by a sagging woollen thread. Previous-cycle pins are pencil
+    grey, unlogged days are pin holes; y ticks stay ledger mono."""
 
-    The wobble comes from a fixed seed, so redraws never shimmer."""
-
-    def __init__(self, master, color=th.INK, faint=th.PENCIL_LT,
+    def __init__(self, master, pin=th.STAMP, pin_faint=th.PENCIL_LT,
                  ymax=3.0, **kw):
         super().__init__(master, **kw)
-        self._color = color
-        self._faint = faint
+        self._pin = pin
+        self._faint = pin_faint
         self._ymax = ymax
         self._values = []
         self._labels = []
-        self._colors = None
         self._missing = None
+        self._split_at = 0
 
-    def set_data(self, values, labels=None, colors=None, missing=None):
+    def set_data(self, values, labels=None, colors=None, missing=None,
+                 split_at=0):
         self._values = list(values)
         self._labels = list(labels) if labels else []
-        self._colors = list(colors) if colors else None
         self._missing = list(missing) if missing else None
+        self._split_at = split_at
         self.redraw()
 
-    def _hand_line(self, x0, y0, x1, y1, fill, width=1, wobble=1.0):
-        """A ruled line with a hand echo: the stroke plus a fainter twin
-        offset by a pixel, like ink bleeding through paper."""
-        self.create_line(x0, y0, x1, y1, fill=fill, width=width)
-        self.create_line(x0 + wobble, y0 + wobble, x1 + wobble, y1 + wobble,
-                         fill=th.RULE_DK, width=1)
+    def _pinhead(self, cx, py, color):
+        edge = th.lerp_hex(color, "#000000", 0.35)
+        self.create_oval(cx - 6, py - 6, cx + 6, py + 6, fill=color,
+                         outline=edge, width=1.5)
+        self.create_oval(cx - 2.5, py - 2.5, cx + 0.5, py + 0.5,
+                         fill="#fffdf7", outline="")
+
+    def _thread(self, points, color):
+        """Woollen yarn: a dark underpass with the coloured twist over it,
+        smoothed and left to sag between pins."""
+        if len(points) < 2:
+            return
+        yarn = th.lerp_hex(color, "#000000", 0.25)
+        for width, fill in ((4.5, yarn), (2.5, color)):
+            flat = []
+            for i, (px, py) in enumerate(points):
+                flat.extend([px, py])
+                if i < len(points) - 1:
+                    qx, qy = points[i + 1]
+                    sag = min(9.0, 3.0 + abs(qx - px) * 0.06)
+                    flat.extend([(px + qx) / 2, (py + qy) / 2 + sag])
+            self.create_line(*flat, fill=fill, width=width, smooth=True)
 
     def redraw(self):
         self.delete("all")
@@ -224,7 +239,6 @@ class SketchBars(Chart):
         if not self._values:
             self._empty()
             return
-        rng = random.Random(9)
         left, top, right, bottom = self._pad
         x0 = left
         x1 = max(x0 + 1, w - right)
@@ -236,52 +250,57 @@ class SketchBars(Chart):
         def y_of(v):
             return y1 - v / self._ymax * plot_h
 
-        # hand-ruled gridlines with Caveat ticks, every half meal
         steps = int(round(self._ymax * 2))
         for i in range(steps + 1):
             v = self._ymax * i / steps
             gy = int(y_of(v))
-            self.create_line(x0, gy, x1, gy + rng.choice((-1, 0, 1)),
-                             fill=self._grid)
+            self.create_line(x0, gy, x1, gy, fill=self._grid)
             self.create_text(x0 - 8, gy, text=f"{v:g}", fill=th.INK_SOFT,
-                             font=th.hand(12), anchor="e")
-        # doubled baseline, the ledger rule
-        self.create_line(x0, y1, x1, y1, fill=self._color, width=2)
+                             font=th.mono(8), anchor="e")
+        self.create_line(x0, y1, x1, y1, fill=th.INK, width=2)
         self.create_line(x0, y1 + 2, x1, y1 + 2, fill=th.RULE_DK, width=1)
 
+        runs = []  # consecutive logged days, threaded in one pass
+        run = []
+        points = {}
         label_every = max(1, int(math.ceil(n / 12.0)))
         for i, v in enumerate(self._values):
             missing = bool(self._missing[i]) if self._missing else False
-            color = th.RULE if missing else (
-                self._colors[i] if self._colors else self._color)
             cx = x0 + (i + 0.5) * slot
-            if missing or not v or v <= 0:
-                if missing:
-                    self.create_oval(cx - 1, y1 - 3, cx + 1, y1 - 1,
-                                     fill=th.RULE, outline="")
-                else:
-                    # a logged zero day: small open ring, deliberate
-                    self.create_oval(cx - 3, y1 - 7, cx + 3, y1 - 1,
-                                     outline=color, width=1)
+            faint = i < self._split_at
+            if missing:
+                self.create_oval(cx - 1, y1 - 3, cx + 1, y1 - 1,
+                                 fill=th.RULE_DK, outline="")
+                if run:
+                    runs.append(run)
+                    run = []
             else:
-                top_y = y_of(v)
-                tilt = rng.uniform(-2.5, 2.5)
-                for dx, wd in ((-1.6, 1), (0, 2), (1.6, 1)):
-                    self.create_line(cx + dx, y1, cx + dx + tilt, top_y,
-                                     fill=color, width=wd)
-                # sketch-ring cap: jittered octagon, never a perfect circle
-                r = 4
-                pts = []
-                for k in range(8):
-                    ang = math.pi / 4 * k + rng.uniform(-0.15, 0.15)
-                    rr = r + rng.uniform(-1.0, 1.0)
-                    pts.extend([cx + tilt + rr * math.cos(ang),
-                                top_y - 6 + rr * math.sin(ang)])
-                self.create_polygon(pts, outline=color, fill="", width=2)
+                color = self._faint if faint else self._pin
+                py = y_of(v) if v and v > 0 else y1 - 8
+                needle = th.PENCIL_LT if faint else th.PENCIL
+                self.create_line(cx, y1, cx, py + 5, fill=needle, width=2)
+                self._pinhead(cx, py, color)
+                points[i] = (cx, py, faint)
+                run.append(i)
             if self._labels and i % label_every == 0:
                 self.create_text(cx, y1 + 12, text=self._labels[i],
-                                 fill=th.INK_SOFT, font=th.hand(11),
+                                 fill=th.INK_SOFT, font=th.mono(8),
                                  anchor="n", justify="center")
+        if run:
+            runs.append(run)
+        for run in runs:
+            # one colour per pass: split where the cycle opens
+            start = 0
+            for j in range(1, len(run) + 1):
+                if j == len(run) or (points[run[j]][2]
+                                     != points[run[start]][2]):
+                    seg = run[start:j]
+                    if len(seg) >= 2:
+                        faint = points[seg[0]][2]
+                        col = self._faint if faint else self._pin
+                        self._thread([(points[k][0], points[k][1])
+                                      for k in seg], col)
+                    start = j
 
 
 class WeekdayChart(Chart):

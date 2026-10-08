@@ -64,10 +64,10 @@ class MealCard(tk.Frame):
         self.head = tk.Frame(self, bg=th.CARD)
         self.head.pack(fill="x", padx=16, pady=(14, 0))
         self.name = tk.Label(self.head, bg=th.CARD, fg=th.INK_SOFT,
-                             font=th.hand(15, "bold"))
+                             font=th.mono(11))
         self.name.pack(side="left")
         self.key = tk.Label(self.head, bg=th.CARD, fg=th.PENCIL,
-                            font=th.hand(13))
+                            font=th.mono(11))
         self.key.pack(side="right")
 
         self.stamp = th.Stamp(self, height=54, bg=th.CARD)
@@ -242,7 +242,7 @@ class MealApp(tk.Tk):
         for name in ("TODAY", "LOG / EDIT", "INSIGHTS"):
             holder = tk.Frame(tabs, bg=th.PAPER)
             lbl = tk.Label(holder, text=name, bg=th.PAPER, fg=th.PENCIL,
-                           font=th.hand(14), padx=12, pady=4,
+                           font=th.mono(10), padx=12, pady=8,
                            cursor="hand2")
             lbl.pack()
             underline = tk.Frame(holder, bg=th.PAPER, height=2)
@@ -314,23 +314,7 @@ class MealApp(tk.Tk):
         if name != self.active_view:
             self.tab_ui[name][1].configure(fg=th.PENCIL)
 
-    def _turn(self, direction, widget, ms=480):
-        """A page-flip wipe across a freshly swapped view."""
-        try:
-            self.update_idletasks()
-            box = (widget.winfo_x(), widget.winfo_y(),
-                   widget.winfo_width(), widget.winfo_height())
-            th.PageTurn.play(self.paper, box, direction, ms=ms)
-        except Exception:
-            pass
-
     def _show(self, name):
-        order = ("TODAY", "LOG / EDIT", "INSIGHTS")
-        try:
-            direction = +1 if order.index(name) >= order.index(
-                self.active_view) else -1
-        except Exception:
-            direction = +1
         self.active_view = name
         for n, f in self.views.items():
             if n == name:
@@ -343,7 +327,6 @@ class MealApp(tk.Tk):
             underline.configure(bg=th.STAMP if active else th.PAPER)
         self.detail_mode = (name == "LOG / EDIT")
         self.refresh_all()
-        self._turn(direction, self.views[name])
 
     # ------------------------------------------------------------ TODAY
     def _build_today(self, parent):
@@ -398,7 +381,7 @@ class MealApp(tk.Tk):
         head = tk.Frame(parent, bg=th.PAPER)
         head.pack(fill="x", pady=(10, 8))
         self.log_hist_title = tk.Label(head, bg=th.PAPER, fg=th.PENCIL,
-                                       font=th.hand(14))
+                                       font=th.mono(10))
         self.log_hist_title.pack(side="left")
         th.button(head, "JUMP TO TODAY", self._jump_today,
                   kind="ghost", bg=th.PAPER)[0].pack(side="right")
@@ -414,8 +397,6 @@ class MealApp(tk.Tk):
     def _step(self, delta):
         self.log_date += timedelta(days=delta)
         self.refresh_all()
-        self._turn(+1 if delta > 0 else -1, self.views["LOG / EDIT"],
-                   ms=320)
 
     def _jump_today(self):
         self.log_date = mc.today()
@@ -453,13 +434,13 @@ class MealApp(tk.Tk):
         brow = tk.Frame(body, bg=th.PAPER)
         brow.pack(fill="x", pady=(0, 4))
         tk.Label(brow, text="03 \u2014 CYCLE", bg=th.PAPER, fg=th.PENCIL,
-                 font=th.hand(14)).pack(side="left")
+                 font=th.mono(10)).pack(side="left")
         self.ins_cycle = tk.Label(brow, bg=th.PAPER, fg=th.INK,
                                   font=th.display(20))
         self.ins_cycle.pack(side="left", padx=(14, 0))
 
         allow_head = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
-                              font=th.hand(14))
+                              font=th.mono(10))
         allow_head.pack(anchor="w", pady=(18, 0))
         self.ins_allow_head = allow_head
         arow = tk.Frame(body, bg=th.PAPER)
@@ -481,12 +462,12 @@ class MealApp(tk.Tk):
 
         th.hline(body, pady=(20, 20))
         bill_head = tk.Label(body, text="CYCLE BILL", bg=th.PAPER,
-                             fg=th.PENCIL, font=th.hand(14))
+                             fg=th.PENCIL, font=th.mono(10))
         bill_head.pack(anchor="w", pady=(0, 8))
         trow = tk.Frame(body, bg=th.PAPER)
         trow.pack(fill="x")
         tk.Label(trow, text="Total liability to date", bg=th.PAPER,
-                 fg=th.INK_SOFT, font=th.hand(15)).pack(side="left")
+                 fg=th.INK_SOFT, font=th.body(12)).pack(side="left")
         self.ins_bill_total = tk.Label(trow, bg=th.PAPER, fg=th.INK,
                                        font=th.display(22))
         self.ins_bill_total.pack(side="left", padx=(12, 0))
@@ -502,13 +483,13 @@ class MealApp(tk.Tk):
 
         th.hline(body, pady=(20, 20))
         self.ins_chart_head = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
-                                       font=th.hand(14))
+                                       font=th.mono(10))
         self.ins_chart_head.pack(anchor="w", pady=(0, 8))
-        self.ins_chart = charts.SketchBars(body, height=190,
-                                           bg=th.GRAPH_BG)
+        self.ins_chart = charts.PinThread(body, height=190,
+                                            bg=th.GRAPH_BG)
         self.ins_chart.pack(fill="x")
         self.ins_chart_note = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
-                                       font=th.hand(13))
+                                       font=th.mono(10))
         self.ins_chart_note.pack(anchor="w", pady=(8, 0))
 
     # ---------------------------------------------------------- refresh
@@ -595,7 +576,7 @@ class MealApp(tk.Tk):
         for d, e in mc.entries_between(view_start, min(ce, today_day)):
             if d == cs:
                 div = tk.Label(self.hist_list, bg=th.PAPER, fg=th.PENCIL,
-                               font=th.hand(14), anchor="w",
+                               font=th.mono(10), anchor="w",
                                text=f"\u2014 {cs.strftime('%d %b')}: "
                                     f"the cycle opens \u2014")
                 div.pack(fill="x", pady=8)
@@ -622,10 +603,8 @@ class MealApp(tk.Tk):
             marker.pack(side="left", fill="y")
 
             def _pick(dd=d):
-                direction = +1 if dd >= self.log_date else -1
                 self.log_date = dd
                 self.refresh_all()
-                self._turn(direction, self.views["LOG / EDIT"], ms=320)
 
             base = th.INK if not prev_cycle else th.PENCIL
             l1 = tk.Label(row, text=d.strftime("%d %b"), width=7, anchor="w",
@@ -759,7 +738,7 @@ class MealApp(tk.Tk):
             colors.append(th.INK if in_cycle else th.PENCIL_LT)
             missing.append(e is None)
         self.ins_chart.set_data(values, labels=labels, colors=colors,
-                                missing=missing)
+                                missing=missing, split_at=2)
         self.ins_chart_note.configure(
             text=(f"{rng_start.strftime('%d %b')}\u2013"
                   f"{(cs - timedelta(days=1)).strftime('%d %b')} previous "

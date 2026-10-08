@@ -51,8 +51,8 @@ def day_complete(d, e):
 
 # ------------------------------------------------------------ meal cards
 class MealCard(tk.Frame):
-    """One entry on the paper inside a hand-ruled border: eyebrow, rubber
-    stamp, ruled meta. Eaten entries rule the border in ink."""
+    """One entry melted into the paper: eyebrow, rubber stamp, ruled
+    meta. Eaten entries ink the heading; the stamp does the talking."""
 
     def __init__(self, master, app, meal):
         super().__init__(master, bg=th.PAPER, bd=0, highlightthickness=0)
@@ -61,10 +61,8 @@ class MealCard(tk.Frame):
         self.date = mc.today()
         self._enabled = True
 
-        self.backing = th.CornerTicks(self, bg=th.PAPER)
-        self.backing.place(x=0, y=0, relwidth=1.0, relheight=1.0)
         self.body = tk.Frame(self, bg=th.PAPER, bd=0, highlightthickness=0)
-        self.body.pack(fill="both", expand=True, padx=13, pady=13)
+        self.body.pack(fill="both", expand=True, padx=4, pady=4)
 
         self.head = tk.Frame(self.body, bg=th.PAPER)
         self.head.pack(fill="x", padx=16, pady=(14, 0))
@@ -92,7 +90,7 @@ class MealCard(tk.Frame):
 
         self._widgets = [self, self.body, self.head, self.name, self.key,
                          self.stamp, self.rule, self.foot, self.meta_l,
-                         self.meta_r, self.backing]
+                         self.meta_r]
         self._bind_all()
 
     # -- interaction ------------------------------------------------
@@ -108,12 +106,10 @@ class MealCard(tk.Frame):
         self.configure(cursor="hand2")
         self.name.configure(fg=th.INK)
         self.rule.configure(bg=th.RULE_DK)
-        self.backing.set_ink(th.INK)
 
     def _leave(self, _e=None):
         self.name.configure(fg=th.INK_SOFT)
         self.rule.configure(bg=th.RULE)
-        self._paint()
         self.configure(cursor="")
 
     def _click(self, _e=None):
@@ -129,11 +125,6 @@ class MealCard(tk.Frame):
         e = mc.peek_day(self.date)
         if bool(e.get(self.meal, False)) and self._enabled:
             self.stamp.strike()
-
-    def _paint(self):
-        e = mc.peek_day(self.date)
-        eaten = bool(e.get(self.meal, False)) and self._enabled
-        self.backing.set_ink(th.INK if eaten else th.RULE_DK)
 
     # -- content ----------------------------------------------------
     def set_day(self, date):
@@ -178,7 +169,6 @@ class MealCard(tk.Frame):
                     fg=th.INK if eaten else th.INK_SOFT)
                 self.meta_r.configure(text=rupees(unit * n),
                                       fg=th.INK if eaten else th.INK_SOFT)
-        self._paint()
 
 
 class CardRow(tk.Frame):
@@ -212,7 +202,9 @@ class MealApp(tk.Tk):
         self.active_view = "TODAY"
         self._fit_to_screen()
 
-        self.paper = th.PaperCanvas(self)
+        self.paper = th.PaperCanvas(self, photo=th.art("bg.jpg",
+                                                               "today.jpg"),
+                                    wash=0.14)
         self.paper.pack(fill="both", expand=True)
 
         self._build()
@@ -267,30 +259,31 @@ class MealApp(tk.Tk):
             self.tab_ui[name] = (holder, lbl, underline)
         th.double_rule(self.paper, pady=4)
 
-        # -- entry masthead with margin note + folio
-        mast = tk.Frame(self.paper, bg=th.PAPER)
-        mast.pack(fill="x", padx=GUTTER, pady=(16, 0))
-        left = tk.Frame(mast, bg=th.PAPER)
-        left.pack(side="left")
-        self.mast_eb = th.eyebrow(left, "")
-        self.mast_eb.pack(anchor="w")
-        self.mast_date = tk.Label(left, bg=th.PAPER, fg=th.INK,
-                                  font=th.display(34), anchor="w")
-        self.mast_date.pack(anchor="w", pady=(2, 0))
-        self.mast_note = tk.Label(left, bg=th.PAPER, fg=th.INK_SOFT,
-                                  font=th.hand(16), anchor="w")
-        self.mast_note.pack(anchor="w", pady=(2, 0))
-        right = tk.Frame(mast, bg=th.PAPER)
-        right.pack(side="right", anchor="n")
-        self.mast_folio = tk.Label(right, bg=th.PAPER, fg=th.PENCIL,
-                                   font=th.mono(12), anchor="e")
-        self.mast_folio.pack(anchor="e")
-        self.mast_datestamp = th.Stamp(right, height=36, bg=th.PAPER,
-                                       font=("Outfit", 10, "bold"))
-        self.mast_datestamp.pack(anchor="e", pady=(8, 0))
-        self.mast_ed = th.Stamp(right, height=40, bg=th.PAPER,
+        # -- full-bleed photographic mastheads, one per view
+        self.banners = {
+            "TODAY": th.PhotoBanner(self.paper, height=168,
+                                    photo=th.art("today.jpg", "bg.jpg"),
+                                    anchor=0.15),
+            "LOG / EDIT": th.PhotoBanner(self.paper, height=168,
+                                         photo=th.art("log.jpg", "bg.jpg"),
+                                         anchor=0.5),
+            "INSIGHTS": th.PhotoBanner(self.paper, height=168,
+                                       photo=th.art("insights.jpg", "bg.jpg"),
+                                       anchor=0.85),
+        }
+
+        # -- sticker strip: the day's stamps pasted under the photo
+        strip = tk.Frame(self.paper, bg=th.PAPER)
+        strip.pack(fill="x", padx=GUTTER, pady=(14, 0))
+        self.mast_datestamp = th.Stamp(strip, height=38, bg=th.PAPER,
+                                       font=("Outfit", 11, "bold"))
+        self.mast_datestamp.pack(side="left")
+        self.mast_ed = th.Stamp(strip, height=38, bg=th.PAPER,
                                 font=("Outfit", 11, "bold"))
-        self.mast_ed.pack(anchor="e", pady=(6, 0))
+        self.mast_ed.pack(side="left", padx=(12, 0))
+        self.mast_folio = tk.Label(strip, bg=th.PAPER, fg=th.PENCIL,
+                                   font=th.mono(12))
+        self.mast_folio.pack(side="right")
 
         # -- views
         self.views = {}
@@ -335,6 +328,11 @@ class MealApp(tk.Tk):
                 f.pack(fill="both", expand=True, padx=GUTTER, pady=(18, 0))
             else:
                 f.pack_forget()
+        for n, b in self.banners.items():
+            if n == name:
+                b.pack(fill="x", before=self.views[name])
+            else:
+                b.pack_forget()
         for n, (holder, lbl, underline) in self.tab_ui.items():
             active = n == name
             lbl.configure(fg=th.INK if active else th.PENCIL)
@@ -358,11 +356,6 @@ class MealApp(tk.Tk):
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
-        self.ephemera = th.Ephemera(parent)
-        self.ephemera.pack(fill="x", pady=(28, 0))
-        self.grove = th.Grove(parent)
-        self.grove.pack(fill="both", expand=True, pady=(8, 0))
-
     def _set_all_today(self, value):
         now = mc.today()
         for meal in mc.MEALS:
@@ -380,8 +373,8 @@ class MealApp(tk.Tk):
         nav.pack(fill="x", pady=(0, 16))
         th.RoundedButton(nav, "< YESTERDAY", lambda: self._step(-1),
                       kind="ghost").pack(side="left")
-        self.log_title = tk.Label(nav, bg=th.PAPER, fg=th.INK,
-                                  font=th.display(20))
+        self.log_title = tk.Label(nav, bg=th.PAPER, fg=th.INK_SOFT,
+                                  font=th.mono(11))
         self.log_title.pack(side="left", expand=True)
         th.RoundedButton(nav, "TOMORROW >", lambda: self._step(1),
                       kind="ghost").pack(side="right")
@@ -390,11 +383,8 @@ class MealApp(tk.Tk):
         self.log_cards.pack(fill="x")
         sumrow = tk.Frame(parent, bg=th.PAPER)
         sumrow.pack(fill="x", pady=(14, 0))
-        self.log_sum = tk.Label(sumrow, bg=th.PAPER, fg=th.INK_SOFT,
-                                font=th.mono(11))
-        self.log_sum.pack(side="left")
         self.log_seal = th.Seal(sumrow, bg=th.PAPER)
-        self.log_seal.pack(side="left", padx=(10, 0))
+        self.log_seal.pack(side="left")
 
         th.hline(parent, pady=(18, 0))
         head = tk.Frame(parent, bg=th.PAPER)
@@ -453,17 +443,9 @@ class MealApp(tk.Tk):
         body.pack(fill="both", expand=True)
         self.ins_body = body
 
-        brow = tk.Frame(body, bg=th.PAPER)
-        brow.pack(fill="x", pady=(0, 4))
-        tk.Label(brow, text="03 \u2014 CYCLE", bg=th.PAPER, fg=th.PENCIL,
-                 font=th.mono(10)).pack(side="left")
-        self.ins_cycle = tk.Label(brow, bg=th.PAPER, fg=th.INK,
-                                  font=th.display(20))
-        self.ins_cycle.pack(side="left", padx=(14, 0))
-
         allow_head = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
                               font=th.mono(10))
-        allow_head.pack(anchor="w", pady=(18, 0))
+        allow_head.pack(anchor="w", pady=(2, 0))
         self.ins_allow_head = allow_head
         arow = tk.Frame(body, bg=th.PAPER)
         arow.pack(fill="x", pady=(6, 2))
@@ -513,8 +495,6 @@ class MealApp(tk.Tk):
         self.ins_chart_note = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
                                        font=th.mono(10))
         self.ins_chart_note.pack(anchor="w", pady=(8, 0))
-        th.Grove(body, mode="sprig", height=110).pack(fill="x",
-                                                     pady=(20, 0))
 
     # ---------------------------------------------------------- refresh
     def refresh_all(self):
@@ -552,17 +532,15 @@ class MealApp(tk.Tk):
         ed = cycle_edition(cs)
         over = a["over"] > 0
 
-        # entry masthead always shows today
-        self.mast_eb.configure(
-            text=f"ENTRY \u2014 {now.strftime('%A').upper()}")
-        self.mast_date.configure(text=now.strftime("%d %B %Y"))
-        self.mast_note.configure(
-            text=(f"day {day_no} of {total_days} \u00b7 batch {batch} "
-                  f"\u2014 {a['remaining']:g} left in the pencil box"
+        # TODAY banner over your photo + the sticker strip
+        self.banners["TODAY"].set(
+            eyebrow=f"ENTRY \u2014 {now.strftime('%A').upper()}",
+            title=now.strftime("%d %B %Y"),
+            note=(f"day {day_no} of {total_days} \u00b7 batch {batch} \u2014 "
+                  f"{a['remaining']:g} left in the pencil box"
                   if not over else
-                  f"day {day_no} of {total_days} \u00b7 batch {batch} "
-                  f"\u2014 over by {a['over']:g}, mind the stamp"),
-            fg=th.INK_SOFT if not over else th.STAMP)
+                  f"day {day_no} of {total_days} \u00b7 batch {batch} \u2014 "
+                  f"over by {a['over']:g}, mind the stamp"))
         self.mast_folio.configure(text=f"p. {day_no:02d}")
         self.mast_datestamp.set(now.strftime("%d %b %Y").upper(), "edition")
         self.mast_ed.set(f"CYCLE No. {ed:02d}", "edition")
@@ -587,16 +565,17 @@ class MealApp(tk.Tk):
         self.today_sum.configure(
             text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
                  f"{rupees(today_bill)}")
-        self.grove.set_folio(
-            f"{(now - mc.cycle_start(now)).days + 1:02d}")
 
     def refresh_log(self):
         self.log_cards.set_day(self.log_date)
         log_e = mc.peek_day(self.log_date)
         log_bill, _ = mc.day_bill(log_e, self.log_date)
+        self.banners["LOG / EDIT"].set(
+            eyebrow=f"LEAF \u2014 {self.log_date.strftime('%A').upper()}",
+            title=self.log_date.strftime("%d %B %Y"),
+            note=(f"{log_e['meals_counted']:g} meals \u00b7 "
+                  f"{rupees(log_bill)}"))
         self.log_title.configure(
-            text=self.log_date.strftime("%A, %d %b %Y"))
-        self.log_sum.configure(
             text=f"Day total \u2014 {log_e['meals_counted']:g} meals  "
                  f"\u00b7  {rupees(log_bill)}")
         self.log_seal.set(day_complete(self.log_date, log_e))
@@ -761,9 +740,14 @@ class MealApp(tk.Tk):
         cs = mc.cycle_start(now)
         ce = mc.cycle_end(now)
         over = a["over"] > 0
-        self.ins_cycle.configure(
-            text=f"Cycle {cs.strftime('%d %b')} \u2013 "
-                 f"{ce.strftime('%d %b')}")
+        day_no = (now - cs).days + 1
+        self.banners["INSIGHTS"].set(
+            eyebrow=(f"{cs.strftime('%B').upper()} CYCLE \u2014 "
+                     f"No. {cycle_edition(cs):02d}"),
+            title=(f"{cs.strftime('%d %b')} \u2013 "
+                   f"{ce.strftime('%d %b')}"),
+            note=(f"day {day_no} of {mc.cycle_days(now)} \u00b7 "
+                  f"batch {mc.batch_of(now)}"))
         self.ins_allow_head.configure(
             text=f"PENCIL BOX \u2014 {a['allowed']:g} MISSES ALLOWED")
         self.ins_allow_left.configure(

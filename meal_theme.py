@@ -1,9 +1,11 @@
-"""Physical-journal theme for the Meal Tracker: the Mess Ledger.
+"""Mess Ledger theme: a paper journal with photographic mastheads.
 
-Replicates the feel of a bound paper journal (Baron Fig / Field Notes /
-Day One lineage): warm paper with grain and dot-grid ruling, a stitched
-spine, a red margin rule, Playfair entry mastheads, Caveat margin notes,
-rubber-stamp states, pencil-box allowance marks and letterpress buttons.
+Warm paper with grain and dot-grid ruling, a stitched spine, Playfair
+entry mastheads set directly over your artwork (washed warm with a baked
+scrim for legibility), Caveat margin notes, rubber-stamp states and a
+pencil-box allowance. Put photos in art/ (today.jpg, log.jpg,
+insights.jpg, or a single bg.jpg) — without them the banners fall back
+to plain paper and ink.
 
 Domain rules and storage live in meal_common; this file is presentation.
 """
@@ -11,7 +13,25 @@ import math
 import random
 import tkinter as tk
 import tkinter.font as tkfont
+from pathlib import Path
 from tkinter import ttk
+
+try:
+    from PIL import Image, ImageFilter, ImageTk
+    _PIL = True
+except Exception:
+    _PIL = False
+
+ART_DIR = Path(__file__).resolve().parent / "art"
+
+
+def art(*names):
+    """First existing artwork file, or None (paper fallback)."""
+    for name in names:
+        p = ART_DIR / name
+        if p.is_file():
+            return str(p)
+    return None
 
 # ---------------------------------------------------------------- palette
 PAPER     = "#f4f1ea"   # journal page
@@ -245,13 +265,18 @@ class PaperCanvas(tk.Canvas):
     render above the drawings, so the paper breathes through every gutter.
     """
 
-    def __init__(self, master, grain_tile=132, grid=24, **kw):
+    def __init__(self, master, grain_tile=132, grid=24, photo=None,
+                 wash=0.14, **kw):
         super().__init__(master, bg=PAPER, highlightthickness=0, bd=0,
                          **kw)
         self._rng = random.Random(11)
         self._grain_img = None
         self._tile = grain_tile
         self._grid = grid
+        self._photo = photo
+        self._wash = wash
+        self._wash_img = None
+        self._wash_key = None
         self._job = None
         self.bind("<Configure>", self._on_resize)
         self._build_grain()
@@ -294,6 +319,19 @@ class PaperCanvas(tk.Canvas):
         if w < 10 or h < 10:
             return
         self.delete("paper")
+        if self._photo and _PIL:
+            key = (self._photo, w, h)
+            if key != self._wash_key:
+                try:
+                    self._wash_img = wash_cover(self._photo, w, h, 0.5,
+                                                self._wash)
+                    self._wash_key = key
+                except Exception:
+                    self._wash_img = None
+                    self._wash_key = None
+            if self._wash_img is not None:
+                self.create_image(0, 0, image=self._wash_img, anchor="nw",
+                                  tags="paper")
         if self._grain_img is not None:
             t = self._tile
             x = 0
@@ -321,6 +359,137 @@ class PaperCanvas(tk.Canvas):
                          dash=(6, 5), tags="paper")
         # red margin rule
         self.create_line(64, 0, 64, h, fill=MARGIN, width=1, tags="paper")
+
+
+# ------------------------------------------------------- photo art
+PAPER_RGB = (244, 241, 234)
+CREAM = "#faf5e9"
+CREAM_DIM = "#e3d5b8"
+TYPE_SHADOW = "#2a1c0e"
+
+
+def cover_fit(img, w, h, anchor=0.5):
+    """Scale img to cover (w, h), cropping with vertical anchor 0..1."""
+    sw, sh = img.size
+    scale = max(w / max(1, sw), h / max(1, sh))
+    img = img.resize((max(1, int(sw * scale)), max(1, int(sh * scale))),
+                     Image.LANCZOS)
+    sw, sh = img.size
+    x = max(0, (sw - w) // 2)
+    y = max(0, int((sh - h) * min(1.0, max(0.0, anchor))))
+    return img.crop((x, y, x + w, y + h))
+
+
+def bake_scrim(img, top_a=46, bot_a=120):
+    """Bake a baked-in legibility scrim: shaded top, clear middle, dark
+    base for cream type to sit on."""
+    w, h = img.size
+    mask = Image.new("L", (1, h))
+    px = mask.load()
+    for y in range(h):
+        t = y / max(1, h - 1)
+        if t < 0.30:
+            a = int(top_a * (1 - t / 0.30))
+        elif t < 0.55:
+            a = 0
+        else:
+            a = int(bot_a * (t - 0.55) / 0.45)
+        px[0, y] = a
+    mask = mask.resize((w, h))
+    layer = Image.new("RGB", (w, h), (32, 20, 5))
+    return Image.composite(layer, img, mask)
+
+
+def wash_cover(path, w, h, anchor, strength):
+    """Your photo melted into the paper at low strength for backgrounds."""
+    img = Image.open(path).convert("RGB")
+    img = cover_fit(img, w, h, anchor)
+    img = img.filter(ImageFilter.GaussianBlur(1.2))
+    return ImageTk.PhotoImage(
+        Image.blend(Image.new("RGB", img.size, PAPER_RGB), img, strength))
+
+
+class PhotoBanner(tk.Canvas):
+    """Full-bleed photographic masthead: your artwork washed warm with a
+    baked scrim, cream serif title set over it with a printed shadow.
+    Without art (or PIL) it falls back to plain paper and ink type."""
+
+    def __init__(self, master, height=168, photo=None, anchor=0.0,
+                 bg=PAPER, strength=1.0, **kw):
+        super().__init__(master, height=height, bg=bg, highlightthickness=0,
+                         bd=0, **kw)
+        self._photo = photo
+        self._anchor = anchor
+        self._strength = strength
+        self._eb, self._title, self._note = "", "", ""
+        self._img = None
+        self._key = None
+        self._job = None
+        self.bind("<Configure>", self._on_resize)
+
+    def set(self, eyebrow="", title="", note=""):
+        if (eyebrow, title, note) != (self._eb, self._title, self._note):
+            self._eb, self._title, self._note = eyebrow, title, note
+            self.redraw()
+
+    def _on_resize(self, _e=None):
+        if self._job is not None:
+            try:
+                self.after_cancel(self._job)
+            except Exception:
+                pass
+        self._job = self.after(250, self.redraw)
+
+    def redraw(self):
+        self._job = None
+        self.delete("all")
+        try:
+            w, h = self.winfo_width(), self.winfo_height()
+        except Exception:
+            return
+        if w < 60 or h < 30:
+            return
+        photo = self._photo and _PIL
+        if photo:
+            key = (self._photo, w, h)
+            if key != self._key:
+                try:
+                    img = Image.open(self._photo).convert("RGB")
+                    img = cover_fit(img, w, h, self._anchor)
+                    img = img.filter(ImageFilter.GaussianBlur(0.8))
+                    img = bake_scrim(img)
+                    self._img = ImageTk.PhotoImage(img)
+                    self._key = key
+                except Exception:
+                    self._img = None
+                    self._key = None
+            if self._img is not None:
+                self.create_image(0, 0, image=self._img, anchor="nw")
+        if photo and self._img is not None:
+            eb_fg, ti_fg, no_fg = CREAM_DIM, CREAM, CREAM_DIM
+            sh = TYPE_SHADOW
+            title_font, eb_font, no_font = display(34, "bold"), mono(11), \
+                body(13)
+        else:
+            eb_fg, ti_fg, no_fg = PENCIL, INK, INK_SOFT
+            sh = None
+            title_font, eb_font, no_font = display(34), mono(11), body(13)
+        x = 28
+        if sh:
+            self.create_text(x, 30, anchor="w", text=self._eb, fill=sh,
+                             font=eb_font)
+        self.create_text(x, 28, anchor="w", text=self._eb, fill=eb_fg,
+                         font=eb_font)
+        if sh:
+            self.create_text(x, 84, anchor="w", text=self._title, fill=sh,
+                             font=title_font)
+        self.create_text(x, 82, anchor="w", text=self._title, fill=ti_fg,
+                         font=title_font)
+        if sh:
+            self.create_text(x, 131, anchor="w", text=self._note, fill=sh,
+                             font=no_font)
+        self.create_text(x, 130, anchor="w", text=self._note, fill=no_fg,
+                         font=no_font)
 
 
 # ------------------------------------------------------- rubber stamp
@@ -605,211 +774,7 @@ class Seal(tk.Canvas):
         self.create_oval(2, 3, s - 2, s - 1, outline=STAMP, width=2)
         self.create_oval(5, 6, s - 5, s - 4, outline=STAMP, width=1)
         self.create_line(s * 0.32, s * 0.54, s * 0.46, s * 0.68,
-                         s * 0.70, s * 0.34, fill=STAMP, width=2)
-
-
-# ------------------------------------------------------- corner ticks
-class CornerTicks(tk.Canvas):
-    """Crop-mark corners instead of a box: four short ink rules that bound
-    an entry without boxing it. Eaten entries tick in ink."""
-
-    def __init__(self, master, arm=26, bg=PAPER, **kw):
-        super().__init__(master, bg=bg, highlightthickness=0, bd=0, **kw)
-        self._ink = RULE_DK
-        self._arm = arm
-        self.bind("<Configure>", lambda e: self.draw())
-
-    def set_ink(self, color):
-        if color != self._ink:
-            self._ink = color
-            self.draw()
-
-    def draw(self):
-        self.delete("all")
-        try:
-            w, h = self.winfo_width(), self.winfo_height()
-        except Exception:
-            return
-        if w < 30 or h < 30:
-            return
-        m, a, c = 5, self._arm, self._ink
-        for x0, y0, dx, dy in ((m, m, 1, 1), (w - m, m, -1, 1),
-                               (m, h - m, 1, -1), (w - m, h - m, -1, -1)):
-            self.create_line(x0, y0, x0 + dx * a, y0, fill=c, width=2)
-            self.create_line(x0, y0, x0, y0 + dy * a, fill=c, width=2)
-
-
-# ------------------------------------------------------- ephemera
-class Ephemera(tk.Canvas):
-    """Margin furniture: an asterism divider with hairlines, a bold
-    coffee ring and a stamped shakahari mark."""
-
-    RING = "#a9885f"
-
-    def __init__(self, master, height=150, bg=PAPER, **kw):
-        super().__init__(master, height=height, bg=bg, highlightthickness=0,
-                         bd=0, **kw)
-        self.bind("<Configure>", lambda e: self.redraw())
-
-    def redraw(self):
-        self.delete("all")
-        try:
-            w, h = self.winfo_width(), self.winfo_height()
-        except Exception:
-            return
-        if w < 60 or h < 20:
-            return
-        cy = h // 2 - 4
-        self.create_line(0, cy + 3, max(0, w - 250), cy - 2, fill=RULE,
-                         width=1)
-        cx = max(60, (w - 230) // 2)
-        for dx, dy in ((-11, 6), (11, 6), (0, -9)):
-            x, y = cx + dx, cy + dy
-            self.create_line(x - 6, y, x + 6, y, fill=RULE_DK, width=1)
-            self.create_line(x, y - 6, x, y + 6, fill=RULE_DK, width=1)
-        rx, ry = w - 96, cy + 6
-        self.create_oval(rx - 64, ry - 58, rx + 64, ry + 58,
-                         outline=self.RING, width=7, stipple="gray50")
-        self.create_oval(rx - 52, ry - 47, rx + 52, ry + 47,
-                         outline=self.RING, width=2)
-        self.create_oval(rx + 72, ry + 42, rx + 76, ry + 46,
-                         fill=self.RING, outline="")
-        for sx, sy in ((rx + 90, ry - 40), (rx - 60, ry + 62)):
-            self.create_line(sx - 5, sy, sx + 5, sy, fill=PENCIL_LT,
-                             width=1)
-            self.create_line(sx, sy - 5, sx, sy + 5, fill=PENCIL_LT,
-                             width=1)
-        self._veg_mark(rx - 108, ry + 8)
-
-    def _veg_mark(self, x, y):
-        self.create_rectangle(x - 13, y - 13, x + 13, y + 13, outline=VEG,
-                              width=2)
-        self.create_rectangle(x - 10, y - 10, x + 10, y + 10, outline=VEG,
-                              width=1)
-        self.create_oval(x - 6, y - 6, x + 6, y + 6, fill=VEG, outline="")
-
-
-# ------------------------------------------------------- grove
-class Grove(tk.Canvas):
-    """Tangerine trees for the empty stretches: deep marigold fruit and
-    olive leaves on bark branches, flat fills with depth. Mode 'grove'
-    rises from the bottom-left corner to fill a void; 'sprig' is a small
-    cutting for panel footers."""
-
-    FRUIT = "#c96a24"
-    FRUIT_DK = "#96501c"
-    FRUIT_HI = "#f2c078"
-    LEAF = "#5a7a2a"
-    LEAF_DK = "#42591d"
-    BARK = "#6b4a2f"
-    SPARK = "#d9a441"
-    WASH = "#e6dfcc"
-
-    def __init__(self, master, mode="grove", bg=PAPER, **kw):
-        super().__init__(master, bg=bg, highlightthickness=0, bd=0, **kw)
-        self._mode = mode
-        self._folio = ""
-        self._fonts = {}
-        self.bind("<Configure>", lambda e: self.redraw())
-
-    def set_folio(self, text):
-        if text != self._folio:
-            self._folio = text
-            self.redraw()
-
-    def _folio_font(self, size):
-        if size not in self._fonts:
-            self._fonts[size] = tkfont.Font(
-                font=("Playfair Display", size, "bold"))
-        return self._fonts[size]
-
-    def _branch(self, points, width):
-        flat = [c for p in points for c in p]
-        self.create_line(*flat, fill=self.BARK, width=width, smooth=True,
-                         capstyle="round")
-
-    def _leaf(self, x, y, length, angle_deg):
-        a = math.radians(angle_deg)
-        dx, dy = math.cos(a), math.sin(a)
-        px, py = -dy, dx
-        half, third = length / 2, length * 0.21
-        tip = (x + dx * half, y + dy * half)
-        base = (x - dx * half, y - dy * half)
-        m1 = (x + px * third + dx * half * 0.12,
-              y + py * third + dy * half * 0.12)
-        m2 = (x - px * third + dx * half * 0.12,
-              y - py * third + dy * half * 0.12)
-        self.create_polygon([tip, m1, base, m2], fill=self.LEAF,
-                            outline=self.LEAF_DK, width=1.5)
-        self.create_line(base, tip, fill=self.LEAF_DK, width=1)
-
-    def _fruit(self, x, y, r):
-        self.create_oval(x - r, y - r, x + r, y + r, fill=self.FRUIT,
-                         outline=self.FRUIT_DK, width=2)
-        self.create_oval(x - r * 0.45, y - r * 0.52, x - r * 0.12,
-                         y - r * 0.2, fill=self.FRUIT_HI, outline="")
-        self.create_line(x, y - r, x, y - r - 7, fill=self.FRUIT_DK,
-                         width=2)
-        self._leaf(x + 7, y - r - 9, 17, -28)
-
-    def _spark(self, x, y, r):
-        self.create_line(x - r, y, x + r, y, fill=self.SPARK, width=2)
-        self.create_line(x, y - r, x, y + r, fill=self.SPARK, width=2)
-        self.create_polygon([(x, y - r * 0.5), (x + r * 0.18, y),
-                             (x, y + r * 0.5), (x - r * 0.18, y)],
-                            fill=self.SPARK, outline="")
-
-    def redraw(self):
-        self.delete("all")
-        try:
-            w, h = self.winfo_width(), self.winfo_height()
-        except Exception:
-            return
-        if w < 80 or h < 60:
-            return
-        if self._mode == "sprig":
-            self._sprig(w, h)
-            return
-        if self._folio:
-            size = max(80, min(190, int(h * 0.62)))
-            self.create_text(56, h * 0.44, text=self._folio, fill=self.WASH,
-                             font=self._folio_font(size), anchor="w")
-        btw = lambda f: w * f
-        self._branch([(14, h - 6), (btw(0.09), h - 74), (btw(0.17), h - 148),
-                      (btw(0.27), h * 0.30)], 6)
-        self._branch([(btw(0.09), h - 74), (btw(0.16), h - 60),
-                      (btw(0.22), h - 78)], 3)
-        self._branch([(btw(0.17), h - 148), (btw(0.24), h - 168),
-                      (btw(0.30), h - 158)], 3)
-        self._branch([(btw(0.05), h - 40), (btw(0.02), h - 90)], 3)
-        for lx, ly, ll, la in ((btw(0.06), h - 60, 34, -50),
-                               (btw(0.13), h - 100, 38, 30),
-                               (btw(0.11), h - 130, 30, -120),
-                               (btw(0.20), h - 120, 34, 55),
-                               (btw(0.24), h - 190, 30, -40),
-                               (btw(0.16), h - 210, 28, 140),
-                               (btw(0.04), h - 70, 26, 160),
-                               (btw(0.28), h - 130, 26, 20)):
-            self._leaf(lx, ly, ll, la)
-        self._fruit(btw(0.22), h - 78, 19)
-        self._fruit(btw(0.30), h - 158, 15)
-        self._fruit(btw(0.045), h - 108, 13)
-        for sx, sy, sr in ((btw(0.36), h * 0.22, 10),
-                           (btw(0.45), h * 0.42, 7),
-                           (btw(0.14), h * 0.12, 8),
-                           (btw(0.55), h * 0.18, 9)):
-            self._spark(sx, sy, sr)
-
-    def _sprig(self, w, h):
-        cy = h // 2
-        self._branch([(8, cy + 8), (w * 0.30, cy), (w * 0.52, cy - 6)], 4)
-        self._leaf(w * 0.12, cy - 2, 26, -35)
-        self._leaf(w * 0.20, cy + 10, 24, 150)
-        self._leaf(w * 0.34, cy - 12, 24, -20)
-        self._leaf(w * 0.42, cy + 4, 22, 160)
-        self._fruit(w * 0.27, cy - 4, 14)
-        self._spark(w * 0.60, cy - 16, 8)
-        self._spark(w * 0.06, cy - 22, 6)
+                          s * 0.70, s * 0.34, fill=STAMP, width=2)
 
 
 # ------------------------------------------------------- scroll frame

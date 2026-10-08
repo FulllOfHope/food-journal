@@ -131,6 +131,21 @@ cd ~/.fonts/meal-tracker
 fc-cache -f ~/.fonts
 ```
 
+## Artwork
+
+Drop your photos in `art/` and they become the mastheads, blended warm
+with a baked scrim under cream type:
+
+| File | Used for |
+|------|----------|
+| `today.jpg` | TODAY banner (top crop) |
+| `log.jpg` | LOG / EDIT banner (centre crop) |
+| `insights.jpg` | INSIGHTS banner (bottom crop) |
+| `bg.jpg` | fallback for any missing banner + faint whole-page wash |
+
+JPG or PNG, landscape works best. Without them (or without Pillow) the
+banners fall back to plain paper and ink, and nothing else changes.
+
 ## Reminders
 
 `~/.config/autostart/bhu-meal-tracker-reminder.desktop` runs `watch` at every

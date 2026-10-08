@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Meal Tracker
+Comment=Track meals with daily reminders and analytics
+Exec=/home/nirajhariyani/bhu-meal-tracker gui
+Icon=restaurant-symbolic
+Terminal=false
+Categories=Utility;Office;
+StartupNotify=true

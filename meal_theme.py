@@ -400,6 +400,20 @@ def bake_scrim(img, top_a=46, bot_a=120):
     return Image.composite(layer, img, mask)
 
 
+def feather_bottom(img, px=56):
+    """Melt the banner's lower edge into the paper instead of ending in
+    a hard photographic line."""
+    w, h = img.size
+    mask = Image.new("L", (1, h), 255)
+    mp = mask.load()
+    for y in range(h):
+        if y >= h - px:
+            mp[0, y] = int(255 * (h - 1 - y) / max(1, px - 1))
+    img = img.convert("RGBA")
+    img.putalpha(mask.resize((w, h)))
+    return img
+
+
 def wash_cover(path, w, h, anchor, strength):
     """Your photo melted into the paper at low strength for backgrounds."""
     img = Image.open(path).convert("RGB")
@@ -460,6 +474,7 @@ class PhotoBanner(tk.Canvas):
                     img = Image.blend(Image.new("RGB", img.size, PAPER_RGB),
                                       img, 0.62)
                     img = bake_scrim(img, top_a=70, bot_a=150)
+                    img = feather_bottom(img)
                     self._img = ImageTk.PhotoImage(img)
                     self._key = key
                 except Exception:

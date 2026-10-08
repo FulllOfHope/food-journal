@@ -332,7 +332,9 @@ def stamp_box(canvas, cx, cy, hw, hh, color, width=2, tags=None):
 
 class Stamp(tk.Canvas):
     """A rubber-stamp state mark: sloped tracked type in a double-rule
-    box with a misprint offset, struck in stamp red or pencil grey."""
+    box with a misprint offset, struck in stamp red or pencil grey.
+
+    strike() replays the landing: overshoot, press, settle."""
 
     KINDS = {
         "eaten": STAMP,
@@ -346,37 +348,86 @@ class Stamp(tk.Canvas):
                  **kw):
         super().__init__(master, height=height, bg=bg,
                          highlightthickness=0, bd=0, **kw)
-        self._font = tkfont.Font(font=font or ("Outfit", 13, "bold"))
+        self._spec = font or ("Outfit", 13, "bold")
+        self._base_size = self._spec[1]
         self._tracking = tracking
         self._bg = bg
+        self._text = ""
+        self._kind = "eaten"
+        self._job = None
 
     def set(self, text, kind="eaten"):
-        color = self.KINDS.get(kind, STAMP)
+        self._cancel()
+        self._text, self._kind = text or "", kind
+        self._draw(1.0, 0, 0, 0.0)
+
+    def strike(self, text=None, kind=None):
+        """Replay the stamp landing after a toggle to eaten."""
+        if text is not None:
+            self._text = text
+        if kind is not None:
+            self._kind = kind
+        self._cancel()
+        self._frames = [(1.45, 3, 3, 0.35),
+                        (1.15, 1, 1, 0.15),
+                        (1.0, 0, 0, 0.0)]
+        self._step_strike()
+
+    def _step_strike(self):
+        self._job = None
+        if not getattr(self, "_frames", None) or not self.winfo_exists():
+            return
+        s, dx, dy, boost = self._frames.pop(0)
+        try:
+            self._draw(s, dx, dy, boost)
+        except Exception:
+            return
+        if self._frames:
+            try:
+                self._job = self.after(55, self._step_strike)
+            except Exception:
+                pass
+
+    def _cancel(self):
+        if self._job is not None:
+            try:
+                self.after_cancel(self._job)
+            except Exception:
+                pass
+            self._job = None
+
+    def _draw(self, scale, dx, dy, boost):
+        color = self.KINDS.get(self._kind, STAMP)
+        if boost:
+            color = lerp_hex(color, "#000000", boost)
         self.delete("all")
         self.configure(bg=self._bg)
-        if not text:
+        if not self._text:
             self.configure(width=1)
             return
-        widths = [self._font.measure(c) + self._tracking for c in text]
+        size = max(6, int(round(self._base_size * scale)))
+        spec = (self._spec[0], size) + tuple(self._spec[2:])
+        font = tkfont.Font(font=spec)
+        widths = [font.measure(c) + self._tracking for c in self._text]
         total = sum(widths)
-        h = self._font.metrics("linespace")
-        hh = h / 2 + 8
-        w = total + 26
-        cx = w / 2 + 2
-        cy = self.winfo_height() / 2 if self.winfo_height() > 1 else 27
+        h = font.metrics("linespace")
+        try:
+            cy = int(self.cget("height")) // 2 + dy
+        except Exception:
+            cy = 27 + dy
+        cx = total / 2 + 12 + dx
         ghost = lerp_hex(color, self._bg, 0.55)
-        stamp_box(self, cx, cy, total / 2 + 10, hh, color, width=2)
+        stamp_box(self, cx, cy, total / 2 + 10, h / 2 + 8, color, width=2)
         x = cx - total / 2
-        for c, wdx in zip(text, widths):
-            dx = x + (wdx - self._tracking) / 2 - cx
-            y = cy + STAMP_SLOPE * dx
-            self.create_text(x + (wdx - self._tracking) / 2 + 1.2, y + 1,
-                             text=c, fill=ghost, font=self._font,
+        for c, wdx in zip(self._text, widths):
+            char_cx = x + (wdx - self._tracking) / 2
+            y = cy + STAMP_SLOPE * (char_cx - cx)
+            self.create_text(char_cx + 1.2, y + 1, text=c, fill=ghost,
+                             font=font, anchor="center")
+            self.create_text(char_cx, y, text=c, fill=color, font=font,
                              anchor="center")
-            self.create_text(x + (wdx - self._tracking) / 2, y, text=c,
-                             fill=color, font=self._font, anchor="center")
             x += wdx
-        self.configure(width=int(w) + 4)
+        self.configure(width=int(total) + 28)
 
 
 # ------------------------------------------------------- pencil marks
@@ -451,6 +502,122 @@ class MarksCanvas(tk.Canvas):
                 self.create_line(bx + 3, 10, bx + 10, 10, fill=ink,
                                  width=2)
             x += 44
+
+
+# ------------------------------------------------------- timeline gut
+class TimelineGutter(tk.Canvas):
+    """Stitched thread running down the history leaves, with a knot per
+    day: ink-filled when the day is complete, open when it is not, stamp
+    red for the selected leaf, faint for previous-cycle days, ringed for
+    today."""
+
+    def __init__(self, master, width=26, bg=PAPER, **kw):
+        super().__init__(master, width=width, bg=bg, highlightthickness=0,
+                         bd=0, **kw)
+        self._bg = bg
+        self._knots = []
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def set_knots(self, knots):
+        """knots: [(y, kind, is_today)] with kind in done/open/prev."""
+        self._knots = list(knots)
+        self.redraw()
+
+    def redraw(self):
+        self.delete("all")
+        try:
+            w, h = self.winfo_width(), self.winfo_height()
+        except Exception:
+            return
+        if w < 4 or h < 10:
+            return
+        cx = w // 2
+        self.create_line(cx, 4, cx, h - 4, fill=STITCH, width=1,
+                         dash=(5, 4))
+        for y, kind, is_today in self._knots:
+            if kind == "selected":
+                fill, edge = STAMP, STAMP
+            elif kind == "done":
+                fill, edge = INK, INK
+            elif kind == "prev":
+                fill, edge = self._bg, PENCIL_LT
+            else:
+                fill, edge = self._bg, INK_SOFT
+            if is_today:
+                self.create_oval(cx - 7, y - 7, cx + 7, y + 7, outline=edge,
+                                 width=1)
+            self.create_oval(cx - 4, y - 4, cx + 4, y + 4, outline=edge,
+                             fill=fill, width=2)
+            self.create_line(cx + 4, y, w - 1, y, fill=edge, width=1)
+
+
+# ------------------------------------------------------- wax seal
+class Seal(tk.Canvas):
+    """Circular COMPLETE seal for fully-logged days."""
+
+    def __init__(self, master, size=28, bg=PAPER, **kw):
+        super().__init__(master, width=size, height=size, bg=bg,
+                         highlightthickness=0, bd=0, **kw)
+        self._size = size
+        self._bg = bg
+
+    def set(self, sealed, bg=None):
+        self.delete("all")
+        self.configure(bg=bg or self._bg)
+        if not sealed:
+            return
+        s = self._size
+        self.create_oval(2, 3, s - 2, s - 1, outline=STAMP, width=2)
+        self.create_oval(5, 6, s - 5, s - 4, outline=STAMP, width=1)
+        self.create_line(s * 0.32, s * 0.54, s * 0.46, s * 0.68,
+                         s * 0.70, s * 0.34, fill=STAMP, width=2)
+
+
+# ------------------------------------------------------- page turn
+class PageTurn:
+    """A page-flip wipe: a blank sheet sweeps across a container,
+    revealing the freshly swapped content beneath it."""
+
+    _busy = False
+
+    @classmethod
+    def play(cls, parent, box, direction=+1):
+        if cls._busy:
+            return
+        x, y, w, h = box
+        if w < 50 or h < 50:
+            return
+        try:
+            cover = tk.Frame(parent, bg="#e7e0cf", bd=0)
+            edge = tk.Frame(cover, bg=RULE_DK, width=3, bd=0)
+            edge.pack(side="left" if direction > 0 else "right", fill="y")
+            cover.place(x=x, y=y, width=w, height=h)
+        except Exception:
+            return
+        cls._busy = True
+        steps = 9
+
+        def move(i=0):
+            try:
+                if i >= steps or not cover.winfo_exists():
+                    raise StopIteration
+                nx = x - direction * int(w * (i + 1) / steps)
+                cover.place(x=nx, y=y, width=w, height=h)
+                cover.after(22, lambda: move(i + 1))
+            except StopIteration:
+                try:
+                    cover.destroy()
+                except Exception:
+                    pass
+                cls._busy = False
+            except Exception:
+                try:
+                    cover.destroy()
+                except Exception:
+                    pass
+                cls._busy = False
+
+        move()
 
 
 # ------------------------------------------------------- scroll frame

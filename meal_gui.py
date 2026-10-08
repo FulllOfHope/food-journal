@@ -40,6 +40,15 @@ def cycle_edition(cs):
                + 1)
 
 
+def day_complete(d, e):
+    """Every offered meal eaten: the leaf earns its wax seal."""
+    if not e:
+        return False
+    if d.weekday() == 5:
+        return bool(e.get("breakfast")) and bool(e.get("lunch"))
+    return all(bool(e.get(m)) for m in mc.MEALS)
+
+
 # ------------------------------------------------------------ meal cards
 class MealCard(tk.Frame):
     """One entry sheet: eyebrow, rubber stamp, ruled meta."""
@@ -102,6 +111,13 @@ class MealCard(tk.Frame):
         e = mc.peek_day(self.date)
         mc.toggle_meal(self.date, self.meal, not e.get(self.meal, False))
         self.app.refresh_all()
+        self.pulse()
+
+    def pulse(self):
+        """Replay the stamp landing if the meal now stands eaten."""
+        e = mc.peek_day(self.date)
+        if bool(e.get(self.meal, False)) and self._enabled:
+            self.stamp.strike()
 
     def _paint(self):
         e = mc.peek_day(self.date)
@@ -298,7 +314,23 @@ class MealApp(tk.Tk):
         if name != self.active_view:
             self.tab_ui[name][1].configure(fg=th.PENCIL)
 
+    def _turn(self, direction, widget):
+        """A page-flip wipe across a freshly swapped view."""
+        try:
+            self.update_idletasks()
+            box = (widget.winfo_x(), widget.winfo_y(),
+                   widget.winfo_width(), widget.winfo_height())
+            th.PageTurn.play(self.paper, box, direction)
+        except Exception:
+            pass
+
     def _show(self, name):
+        order = ("TODAY", "LOG / EDIT", "INSIGHTS")
+        try:
+            direction = +1 if order.index(name) >= order.index(
+                self.active_view) else -1
+        except Exception:
+            direction = +1
         self.active_view = name
         for n, f in self.views.items():
             if n == name:
@@ -311,6 +343,7 @@ class MealApp(tk.Tk):
             underline.configure(bg=th.STAMP if active else th.PAPER)
         self.detail_mode = (name == "LOG / EDIT")
         self.refresh_all()
+        self._turn(direction, self.views[name])
 
     # ------------------------------------------------------------ TODAY
     def _build_today(self, parent):
@@ -335,6 +368,9 @@ class MealApp(tk.Tk):
                 continue
             mc.toggle_meal(now, meal, value)
         self.refresh_all()
+        if value:
+            for card in self.today_cards.cards.values():
+                card.pulse()
 
     # ---------------------------------------------------------- LOG/EDIT
     def _build_log(self, parent):
@@ -350,9 +386,13 @@ class MealApp(tk.Tk):
 
         self.log_cards = CardRow(parent, self)
         self.log_cards.pack(fill="x")
-        self.log_sum = tk.Label(parent, bg=th.PAPER, fg=th.INK_SOFT,
+        sumrow = tk.Frame(parent, bg=th.PAPER)
+        sumrow.pack(fill="x", pady=(14, 0))
+        self.log_sum = tk.Label(sumrow, bg=th.PAPER, fg=th.INK_SOFT,
                                 font=th.mono(11))
-        self.log_sum.pack(anchor="w", pady=(14, 0))
+        self.log_sum.pack(side="left")
+        self.log_seal = th.Seal(sumrow, bg=th.PAPER)
+        self.log_seal.pack(side="left", padx=(10, 0))
 
         th.hline(parent, pady=(18, 0))
         head = tk.Frame(parent, bg=th.PAPER)
@@ -366,10 +406,15 @@ class MealApp(tk.Tk):
         self.hist_scroll = th.ScrollFrame(parent, bg=th.PAPER)
         self.hist_scroll.pack(fill="both", expand=True)
         self.hist_inner = self.hist_scroll.inner
+        self.hist_thread = th.TimelineGutter(self.hist_inner, bg=th.PAPER)
+        self.hist_thread.pack(side="left", fill="y")
+        self.hist_list = tk.Frame(self.hist_inner, bg=th.PAPER)
+        self.hist_list.pack(side="left", fill="x", expand=True)
 
     def _step(self, delta):
         self.log_date += timedelta(days=delta)
         self.refresh_all()
+        self._turn(+1 if delta > 0 else -1, self.views["LOG / EDIT"])
 
     def _jump_today(self):
         self.log_date = mc.today()
@@ -387,6 +432,10 @@ class MealApp(tk.Tk):
         e = mc.peek_day(d)
         mc.toggle_meal(d, meal, not e.get(meal, False))
         self.refresh_all()
+        cards = (self.today_cards if self.active_view == "TODAY"
+                 else self.log_cards).cards.get(meal)
+        if cards is not None:
+            cards.pulse()
 
     def _key_step(self, delta):
         if self.active_view == "LOG / EDIT":
@@ -521,6 +570,7 @@ class MealApp(tk.Tk):
         self.log_sum.configure(
             text=f"Day total \u2014 {log_e['meals_counted']:g} meals  "
                  f"\u00b7  {rupees(log_bill)}")
+        self.log_seal.set(day_complete(self.log_date, log_e))
         self._fill_history()
 
         # INSIGHTS
@@ -532,7 +582,7 @@ class MealApp(tk.Tk):
                 self.after_idle(sf.refresh)
 
     def _fill_history(self):
-        for w in self.hist_inner.winfo_children():
+        for w in self.hist_list.winfo_children():
             w.destroy()
         now = mc.today()
         cs = mc.cycle_start(now)
@@ -542,9 +592,10 @@ class MealApp(tk.Tk):
 
         view_start = cs - timedelta(days=2)
         today_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        rows = []
         for d, e in mc.entries_between(view_start, min(ce, today_day)):
             if d == cs:
-                div = tk.Label(self.hist_inner, bg=th.PAPER, fg=th.PENCIL,
+                div = tk.Label(self.hist_list, bg=th.PAPER, fg=th.PENCIL,
                                font=th.mono(10), anchor="w",
                                text=f"\u2014 {cs.strftime('%d %b')}: "
                                     f"the cycle opens \u2014")
@@ -558,20 +609,24 @@ class MealApp(tk.Tk):
                 marks = tuple(bool(e.get(m)) if e else False
                               for m in mc.MEALS)
             total = f"{e['meals_counted']:g} meals" if e else "0.0 meals"
+            complete = day_complete(d, e)
+            is_today = mc._date_key(d) == mc._date_key(now)
             selected = mc._date_key(d) == mc._date_key(self.log_date)
             tag = ""
             if prev_cycle:
                 tag = "(Previous Cycle)"
             elif selected:
                 tag = "< selected"
-            row = tk.Frame(self.hist_inner, bg=th.PAPER, cursor="hand2")
+            row = tk.Frame(self.hist_list, bg=th.PAPER, cursor="hand2")
             row.pack(fill="x", pady=1)
             marker = tk.Frame(row, bg=th.PAPER, width=2, bd=0)
             marker.pack(side="left", fill="y")
 
             def _pick(dd=d):
+                direction = +1 if dd >= self.log_date else -1
                 self.log_date = dd
                 self.refresh_all()
+                self._turn(direction, self.views["LOG / EDIT"])
 
             base = th.INK if not prev_cycle else th.PENCIL
             l1 = tk.Label(row, text=d.strftime("%d %b"), width=7, anchor="w",
@@ -594,7 +649,10 @@ class MealApp(tk.Tk):
                           fg=th.STAMP if selected else th.PENCIL,
                           font=th.mono(11))
             l6.pack(side="left")
-            cells = [l1, l2, l4, l5, l6]
+            seal = th.Seal(row, bg=th.PAPER)
+            seal.pack(side="left", padx=(4, 8))
+            seal.set(complete)
+            cells = [l1, l2, l4, l5, l6, seal]
             if selected:
                 marker.configure(bg=th.INK)
                 row.configure(bg=th.CARD)
@@ -629,6 +687,22 @@ class MealApp(tk.Tk):
             mk.bind("<Button-1>", lambda e, dd=d: _pick(dd))
             mk.bind("<Enter>", _enter)
             mk.bind("<Leave>", _leave)
+            seal.bind("<Button-1>", lambda e, dd=d: _pick(dd))
+            seal.bind("<Enter>", _enter)
+            seal.bind("<Leave>", _leave)
+            kind = ("selected" if selected
+                    else ("prev" if prev_cycle
+                          else ("done" if complete else "open")))
+            rows.append((row, kind, is_today))
+        self.hist_list.update_idletasks()
+        knots = []
+        for row, kind, is_today in rows:
+            try:
+                y = row.winfo_y() + row.winfo_height() // 2
+            except Exception:
+                continue
+            knots.append((y, kind, is_today))
+        self.hist_thread.set_knots(knots)
 
     def _fill_insights(self, now, a):
         cs = mc.cycle_start(now)

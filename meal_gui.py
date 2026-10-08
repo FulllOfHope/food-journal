@@ -51,17 +51,22 @@ def day_complete(d, e):
 
 # ------------------------------------------------------------ meal cards
 class MealCard(tk.Frame):
-    """One entry straight on the paper: eyebrow, rubber stamp, ruled
-    meta. No sheet, no box; the stamp carries the state."""
+    """One entry on the paper inside a hand-ruled border: eyebrow, rubber
+    stamp, ruled meta. Eaten entries rule the border in ink."""
 
-    def __init__(self, master, app, meal):
+    def __init__(self, master, app, meal, seed=1):
         super().__init__(master, bg=th.PAPER, bd=0, highlightthickness=0)
         self.app = app
         self.meal = meal
         self.date = mc.today()
         self._enabled = True
 
-        self.head = tk.Frame(self, bg=th.PAPER)
+        self.backing = th.SketchBorder(self, seed=seed, bg=th.PAPER)
+        self.backing.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+        self.body = tk.Frame(self, bg=th.PAPER, bd=0, highlightthickness=0)
+        self.body.pack(fill="both", expand=True, padx=13, pady=13)
+
+        self.head = tk.Frame(self.body, bg=th.PAPER)
         self.head.pack(fill="x", padx=16, pady=(14, 0))
         self.name = tk.Label(self.head, bg=th.PAPER, fg=th.INK_SOFT,
                              font=th.mono(11))
@@ -70,13 +75,13 @@ class MealCard(tk.Frame):
                             font=th.mono(11))
         self.key.pack(side="right")
 
-        self.stamp = th.Stamp(self, height=54, bg=th.PAPER)
+        self.stamp = th.Stamp(self.body, height=54, bg=th.PAPER)
         self.stamp.pack(anchor="w", padx=16, pady=(20, 20))
 
-        self.rule = tk.Frame(self, bg=th.RULE, height=1, bd=0)
+        self.rule = tk.Frame(self.body, bg=th.RULE, height=1, bd=0)
         self.rule.pack(fill="x", padx=16)
 
-        self.foot = tk.Frame(self, bg=th.PAPER)
+        self.foot = tk.Frame(self.body, bg=th.PAPER)
         self.foot.pack(fill="x", padx=16, pady=(10, 14))
         self.meta_l = tk.Label(self.foot, bg=th.PAPER, fg=th.INK_SOFT,
                                font=th.mono(12))
@@ -85,8 +90,9 @@ class MealCard(tk.Frame):
                                font=th.mono(12))
         self.meta_r.pack(side="right")
 
-        self._widgets = [self, self.head, self.name, self.key, self.stamp,
-                         self.rule, self.foot, self.meta_l, self.meta_r]
+        self._widgets = [self, self.body, self.head, self.name, self.key,
+                         self.stamp, self.rule, self.foot, self.meta_l,
+                         self.meta_r, self.backing]
         self._bind_all()
 
     # -- interaction ------------------------------------------------
@@ -102,10 +108,12 @@ class MealCard(tk.Frame):
         self.configure(cursor="hand2")
         self.name.configure(fg=th.INK)
         self.rule.configure(bg=th.RULE_DK)
+        self.backing.set_ink(th.INK)
 
     def _leave(self, _e=None):
         self.name.configure(fg=th.INK_SOFT)
         self.rule.configure(bg=th.RULE)
+        self._paint()
         self.configure(cursor="")
 
     def _click(self, _e=None):
@@ -125,7 +133,7 @@ class MealCard(tk.Frame):
     def _paint(self):
         e = mc.peek_day(self.date)
         eaten = bool(e.get(self.meal, False)) and self._enabled
-        self.configure(highlightbackground=th.INK if eaten else th.RULE)
+        self.backing.set_ink(th.INK if eaten else th.RULE_DK)
 
     # -- content ----------------------------------------------------
     def set_day(self, date):
@@ -181,7 +189,7 @@ class CardRow(tk.Frame):
         self.cards = {}
         for i, meal in enumerate(mc.MEALS):
             self.columnconfigure(i, weight=1, uniform="card")
-            card = MealCard(self, app, meal)
+            card = MealCard(self, app, meal, seed=11 * (i + 1) + 3)
             card.grid(row=0, column=i, sticky="nsew",
                       padx=(0, 16) if i < 2 else 0)
             self.cards[meal] = card

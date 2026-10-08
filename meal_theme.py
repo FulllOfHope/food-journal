@@ -30,6 +30,7 @@ MARGIN    = "#d69a86"   # red margin rule
 SPINE     = "#e8e2d4"   # bound edge strip
 STITCH    = "#b3a88f"   # stitching thread
 STAMP     = "#b3402e"   # rubber-stamp red
+VEG       = "#2e7d46"   # shakahari green, for the veg mark
 RED       = "#b3402e"   # danger is stamped red, like everything urgent
 
 # legacy aliases kept so untouched call-sites keep working
@@ -225,7 +226,7 @@ class RoundedButton(tk.Canvas):
             fill = STAMP if hot else INK
             self._round_rect_bg(w, h, r, fill, fill, PAPER)
         else:
-            fill = CARD if hot else self._bg
+            fill = CARD if hot else "#eadfc6"
             edge = INK if hot else RULE_DK
             fg = INK if hot else INK_SOFT
             self._round_rect_bg(w, h, r, fill, edge, fg)
@@ -607,6 +608,59 @@ class Seal(tk.Canvas):
                          s * 0.70, s * 0.34, fill=STAMP, width=2)
 
 
+# ------------------------------------------------------- sketch border
+class SketchBorder(tk.Canvas):
+    """A hand-ruled double border that never looks stamped out: jittered
+    segments from a fixed seed, so it stays put across redraws. Eaten
+    entries rule it in ink, pending ones in pencil."""
+
+    def __init__(self, master, seed=1, bg=PAPER, **kw):
+        super().__init__(master, bg=bg, highlightthickness=0, bd=0, **kw)
+        self._seed = seed
+        self._ink = RULE_DK
+        self.bind("<Configure>", lambda e: self.sketch())
+
+    def set_ink(self, color):
+        if color != self._ink:
+            self._ink = color
+            self.sketch()
+
+    def sketch(self):
+        self.delete("all")
+        try:
+            w, h = self.winfo_width(), self.winfo_height()
+        except Exception:
+            return
+        if w < 30 or h < 30:
+            return
+        rng = random.Random(self._seed)
+        light = lerp_hex(self._ink, PAPER, 0.45)
+        for inset, wd, col in ((6, 1.5, self._ink), (11, 1, light)):
+            pts = []
+            x = float(inset)
+            while x < w - inset:
+                pts.append((x, inset + rng.uniform(-1.5, 1.5)))
+                x += 26
+            pts.append((w - inset, inset + rng.uniform(-1.5, 1.5)))
+            y = float(inset)
+            while y < h - inset:
+                pts.append((w - inset + rng.uniform(-1.5, 1.5), y))
+                y += 26
+            pts.append((w - inset + rng.uniform(-1.5, 1.5), h - inset))
+            x = float(w - inset)
+            while x > inset:
+                pts.append((x, h - inset + rng.uniform(-1.5, 1.5)))
+                x -= 26
+            pts.append((inset, h - inset + rng.uniform(-1.5, 1.5)))
+            y = float(h - inset)
+            while y > inset:
+                pts.append((inset + rng.uniform(-1.5, 1.5), y))
+                y -= 26
+            pts.append(pts[0])
+            flat = [c for p in pts for c in p]
+            self.create_line(*flat, fill=col, width=wd)
+
+
 # ------------------------------------------------------- ephemera
 class Ephemera(tk.Canvas):
     """Margin furniture for empty stretches: a giant watermark folio, an
@@ -659,6 +713,49 @@ class Ephemera(tk.Canvas):
                              width=1)
             self.create_line(sx, sy - 5, sx, sy + 5, fill=PENCIL_LT,
                              width=1)
+        # veg doodle row along the bottom: tomato, wheat, chili and a
+        # stamped shakahari mark
+        dy = h - 48
+        self._doodle_tomato(w * 0.20, dy)
+        self._doodle_wheat(w * 0.40, dy)
+        self._doodle_chili(w * 0.60, dy)
+        self._veg_mark(max(w - 190, w * 0.72), dy)
+
+    def _doodle_tomato(self, x, y):
+        c = INK_SOFT
+        self.create_oval(x - 13, y - 12, x + 13, y + 14, outline=c, width=2)
+        for dx, dy in ((-9, -12), (-4, -16), (2, -17), (8, -14), (12, -10)):
+            self.create_line(x, y - 12, x + dx, y + dy, fill=c, width=2)
+        self.create_line(x + 2, y - 17, x + 2, y - 24, fill=c, width=2)
+        self.create_arc(x - 9, y - 8, x - 2, y + 2, start=90, extent=120,
+                        outline=c, width=1, style="arc")
+
+    def _doodle_wheat(self, x, y):
+        c = INK_SOFT
+        self.create_line(x, y + 22, x, y - 22, fill=c, width=2)
+        for i, dy in enumerate((-14, -6, 2, 10)):
+            side = 1 if i % 2 == 0 else -1
+            self.create_line(x, y + dy, x + side * 11, y + dy - 8, fill=c,
+                             width=2)
+            self.create_line(x, y + dy + 4, x - side * 11, y + dy - 4,
+                             fill=c, width=2)
+        self.create_line(x, y - 22, x - 4, y - 30, fill=c, width=1)
+        self.create_line(x, y - 22, x + 4, y - 30, fill=c, width=1)
+
+    def _doodle_chili(self, x, y):
+        c = INK_SOFT
+        self.create_line(x - 14, y - 8, x - 2, y + 2, x + 12, y - 2,
+                         fill=c, width=6, capstyle="round", smooth=True)
+        self.create_line(x + 12, y - 2, x + 18, y - 12, fill=c, width=2)
+        self.create_line(x + 18, y - 12, x + 12, y - 14, fill=c, width=2)
+        self.create_line(x + 18, y - 12, x + 22, y - 16, fill=c, width=2)
+
+    def _veg_mark(self, x, y):
+        self.create_rectangle(x - 13, y - 13, x + 13, y + 13, outline=VEG,
+                              width=2)
+        self.create_rectangle(x - 10, y - 10, x + 10, y + 10, outline=VEG,
+                              width=1)
+        self.create_oval(x - 6, y - 6, x + 6, y + 6, fill=VEG, outline="")
 
 
 # ------------------------------------------------------- scroll frame

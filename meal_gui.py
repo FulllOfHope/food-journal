@@ -51,37 +51,37 @@ def day_complete(d, e):
 
 # ------------------------------------------------------------ meal cards
 class MealCard(tk.Frame):
-    """One entry sheet: eyebrow, rubber stamp, ruled meta. No box: the
-    sheet sits bare on the paper and the stamp carries the state."""
+    """One entry straight on the paper: eyebrow, rubber stamp, ruled
+    meta. No sheet, no box; the stamp carries the state."""
 
     def __init__(self, master, app, meal):
-        super().__init__(master, bg=th.CARD, bd=0, highlightthickness=0)
+        super().__init__(master, bg=th.PAPER, bd=0, highlightthickness=0)
         self.app = app
         self.meal = meal
         self.date = mc.today()
         self._enabled = True
 
-        self.head = tk.Frame(self, bg=th.CARD)
+        self.head = tk.Frame(self, bg=th.PAPER)
         self.head.pack(fill="x", padx=16, pady=(14, 0))
-        self.name = tk.Label(self.head, bg=th.CARD, fg=th.INK_SOFT,
+        self.name = tk.Label(self.head, bg=th.PAPER, fg=th.INK_SOFT,
                              font=th.mono(11))
         self.name.pack(side="left")
-        self.key = tk.Label(self.head, bg=th.CARD, fg=th.PENCIL,
+        self.key = tk.Label(self.head, bg=th.PAPER, fg=th.PENCIL,
                             font=th.mono(11))
         self.key.pack(side="right")
 
-        self.stamp = th.Stamp(self, height=54, bg=th.CARD)
+        self.stamp = th.Stamp(self, height=54, bg=th.PAPER)
         self.stamp.pack(anchor="w", padx=16, pady=(20, 20))
 
         self.rule = tk.Frame(self, bg=th.RULE, height=1, bd=0)
         self.rule.pack(fill="x", padx=16)
 
-        self.foot = tk.Frame(self, bg=th.CARD)
+        self.foot = tk.Frame(self, bg=th.PAPER)
         self.foot.pack(fill="x", padx=16, pady=(10, 14))
-        self.meta_l = tk.Label(self.foot, bg=th.CARD, fg=th.INK_SOFT,
+        self.meta_l = tk.Label(self.foot, bg=th.PAPER, fg=th.INK_SOFT,
                                font=th.mono(12))
         self.meta_l.pack(side="left")
-        self.meta_r = tk.Label(self.foot, bg=th.CARD, fg=th.INK_SOFT,
+        self.meta_r = tk.Label(self.foot, bg=th.PAPER, fg=th.INK_SOFT,
                                font=th.mono(12))
         self.meta_r.pack(side="right")
 
@@ -100,10 +100,12 @@ class MealCard(tk.Frame):
         if not self._enabled:
             return
         self.configure(cursor="hand2")
-        self.stamp.set_hover(True)
+        self.name.configure(fg=th.INK)
+        self.rule.configure(bg=th.RULE_DK)
 
     def _leave(self, _e=None):
-        self.stamp.set_hover(False)
+        self.name.configure(fg=th.INK_SOFT)
+        self.rule.configure(bg=th.RULE)
         self.configure(cursor="")
 
     def _click(self, _e=None):
@@ -342,9 +344,9 @@ class MealApp(tk.Tk):
         self.today_sum = tk.Label(row, bg=th.PAPER, fg=th.INK,
                                   font=th.mono(11))
         self.today_sum.pack(side="left")
-        th.LinkButton(row, "CLEAR", lambda: self._set_all_today(False),
+        th.RoundedButton(row, "CLEAR", lambda: self._set_all_today(False),
                       kind="ghost").pack(side="right", padx=(10, 0))
-        th.LinkButton(row, "MARK ALL EATEN",
+        th.RoundedButton(row, "MARK ALL EATEN",
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
@@ -366,12 +368,12 @@ class MealApp(tk.Tk):
     def _build_log(self, parent):
         nav = tk.Frame(parent, bg=th.PAPER)
         nav.pack(fill="x", pady=(0, 16))
-        th.LinkButton(nav, "< YESTERDAY", lambda: self._step(-1),
+        th.RoundedButton(nav, "< YESTERDAY", lambda: self._step(-1),
                       kind="ghost").pack(side="left")
         self.log_title = tk.Label(nav, bg=th.PAPER, fg=th.INK,
                                   font=th.display(20))
         self.log_title.pack(side="left", expand=True)
-        th.LinkButton(nav, "TOMORROW >", lambda: self._step(1),
+        th.RoundedButton(nav, "TOMORROW >", lambda: self._step(1),
                       kind="ghost").pack(side="right")
 
         self.log_cards = CardRow(parent, self)
@@ -390,7 +392,7 @@ class MealApp(tk.Tk):
         self.log_hist_title = tk.Label(head, bg=th.PAPER, fg=th.PENCIL,
                                        font=th.mono(10))
         self.log_hist_title.pack(side="left")
-        th.LinkButton(head, "JUMP TO TODAY", self._jump_today,
+        th.RoundedButton(head, "JUMP TO TODAY", self._jump_today,
                       kind="ghost").pack(side="right")
 
         self.hist_scroll = th.ScrollFrame(parent, bg=th.PAPER)
@@ -573,6 +575,8 @@ class MealApp(tk.Tk):
         self.today_sum.configure(
             text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
                  f"{rupees(today_bill)}")
+        self.ephemera.set_folio(
+            f"{(now - mc.cycle_start(now)).days + 1:02d}")
 
     def refresh_log(self):
         self.log_cards.set_day(self.log_date)

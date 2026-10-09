@@ -368,7 +368,7 @@ PAPER_RGB = (244, 241, 234)
 
 
 _CACHE_DIR = Path.home() / ".cache" / "mess-ledger" / "art"
-_ART_VERSION = 4  # bump whenever the art pipeline changes
+_ART_VERSION = 6  # bump whenever the art pipeline changes
 
 
 def _cache_path(key):
@@ -414,6 +414,67 @@ def cover_fit(img, w, h, anchor=0.5):
     x = max(0, (sw - w) // 2)
     y = max(0, int((sh - h) * min(1.0, max(0.0, anchor))))
     return img.crop((x, y, x + w, y + h))
+
+
+def contain_fit(img, w, h):
+    """Scale img to sit entirely inside (w, h). Nothing is cropped."""
+    sw, sh = img.size
+    scale = min(w / max(1, sw), h / max(1, sh))
+    return img.resize((max(1, int(sw * scale)), max(1, int(sh * scale))),
+                      Image.LANCZOS)
+
+
+def ambient_fill(img, w, h, anchor=0.5, blur=0.05, fade=0.5):
+    """A blurred, paper-tinted wash of the artwork used as backdrop, so a
+    complete uncropped print can sit on top without leaving dead space."""
+    base = cover_fit(img, w, h, anchor)
+    base = base.filter(ImageFilter.GaussianBlur(
+        radius=max(3, int(max(w, h) * blur))))
+    return Image.blend(base, Image.new("RGB", base.size, PAPER_RGB), fade)
+
+
+def art_hash(path):
+    """Content hash so identical artwork is never pasted twice."""
+    try:
+        with open(path, "rb") as fh:
+            return hashlib.sha1(fh.read()).hexdigest()
+    except Exception:
+        return path
+
+
+def print_strip(paths, w, h, gap=12, margin=6):
+    """Lay artworks out edge to edge as complete prints on paper.
+
+    Every image is scaled to fit whole, so the band shows all of the
+    artwork instead of a cropped sliver of it."""
+    prints = []
+    for p in paths:
+        try:
+            img = Image.open(p).convert("RGB")
+        except Exception:
+            continue
+        prints.append(contain_fit(img, 100000, max(1, h - 2 * margin)))
+    if not prints:
+        return Image.new("RGB", (w, h), PAPER_RGB)
+    if len(prints) == 1:
+        band = ambient_fill(Image.open(paths[0]).convert("RGB"), w, h)
+        band.paste(prints[0], ((w - prints[0].width) // 2,
+                               (h - prints[0].height) // 2))
+        return band
+    room = w - gap * (len(prints) - 1)
+    total = sum(im.width for im in prints)
+    scale = min(1.0, room / max(1, total))
+    if scale < 1.0:
+        prints = [im.resize((max(1, int(im.width * scale)),
+                             max(1, int(im.height * scale))), Image.LANCZOS)
+                  for im in prints]
+    total = sum(im.width for im in prints) + gap * (len(prints) - 1)
+    band = Image.new("RGB", (w, h), PAPER_RGB)
+    x = max(0, (w - total) // 2)
+    for im in prints:
+        band.paste(im, (x, (h - im.height) // 2))
+        x += im.width + gap
+    return band
 
 
 def feather_edges(img, top=30, bottom=56):
@@ -471,10 +532,12 @@ class PhotoBanner(tk.Canvas):
     Without art (or PIL) the band is plain paper."""
 
     def __init__(self, master, height=168, photo=None, anchor=0.0,
-                 bg=PAPER, seed=7, **kw):
+                 bg=PAPER, seed=7, photos=None, **kw):
         super().__init__(master, height=height, bg=bg, highlightthickness=0,
                          bd=0, **kw)
-        self._photo = photo
+        pool = list(photos) if photos else ([photo] if photo else [])
+        self._photos = [p for p in pool if p]
+        self._photo = self._photos[0] if self._photos else None
         self._anchor = anchor
         self._seed = seed
         self._img = None
@@ -499,16 +562,14 @@ class PhotoBanner(tk.Canvas):
             return
         if w < 60 or h < 30:
             return
-        photo = self._photo and _PIL
+        photo = self._photos and _PIL
         if photo:
-            key = (_ART_VERSION, "banner", self._photo,
-                   _file_stamp(self._photo), w, h, round(self._anchor, 3))
+            key = (_ART_VERSION, "strip", tuple(self._photos),
+                   tuple(_file_stamp(p) for p in self._photos), w, h)
             if key != self._key:
                 try:
                     def build(w=w, h=h):
-                        img = Image.open(self._photo).convert("RGB")
-                        return feather_edges(cover_fit(img, w, h,
-                                                       self._anchor))
+                        return feather_edges(print_strip(self._photos, w, h))
                     self._img = ImageTk.PhotoImage(cached_image(key, build))
                     self._key = key
                 except Exception:

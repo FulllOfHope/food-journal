@@ -200,6 +200,24 @@ class CardRow(tk.Frame):
 
 
 # ----------------------------------------------------------------- app
+DOODLE_KINDS = ["tangerine", "sprig", "wheat", "star", "leaf", "chili"]
+PRINT_POOL = ["extra-grove-fl.jpg", "extra-grove-ormond.jpg",
+              "today.jpg", "log.jpg", "insights.jpg"]
+POLAROID_RESERVE = 320  # the pasted print owns this much of the void
+
+
+def w0(app):
+    try:
+        return app.void.winfo_width()
+    except Exception:
+        return 0
+
+
+def _overlaps(a, b, pad=0):
+    return not (a[2] + pad <= b[0] or b[2] + pad <= a[0]
+                or a[3] + pad <= b[1] or b[3] + pad <= a[1])
+
+
 class MealApp(tk.Tk):
     def __init__(self):
         super().__init__(className="FoodJournal")
@@ -223,6 +241,7 @@ class MealApp(tk.Tk):
                                                                "today.jpg"),
                                     wash=0.14)
         self.paper.pack(fill="both", expand=True)
+        self.paper.bind("<Configure>", self._schedule_scatter)
 
         self._build()
         self.bind("<Key-b>", lambda e: self._key_meal("breakfast"))
@@ -234,6 +253,7 @@ class MealApp(tk.Tk):
         self.bind("<Left>", lambda e: self._key_step(-1))
         self.bind("<Right>", lambda e: self._key_step(1))
         self.refresh_all()
+        self._schedule_scatter()
 
     # ------------------------------------------------------------ layout
     def _fit_to_screen(self):
@@ -288,14 +308,11 @@ class MealApp(tk.Tk):
         # -- full-bleed photographic mastheads, one per view
         self.banners = {
             "TODAY": th.PhotoBanner(self.paper, height=168,
-                                    photo=th.art("today.jpg", "bg.jpg"),
-                                    anchor=0.15, seed=11),
+                                    photos=self._print_set("today.jpg")),
             "LOG / EDIT": th.PhotoBanner(self.paper, height=168,
-                                         photo=th.art("log.jpg", "bg.jpg"),
-                                         anchor=0.5, seed=22),
+                                         photos=self._print_set("log.jpg")),
             "INSIGHTS": th.PhotoBanner(self.paper, height=168,
-                                       photo=th.art("insights.jpg", "bg.jpg"),
-                                       anchor=0.85, seed=33),
+                                       photos=self._print_set("insights.jpg")),
         }
 
         # -- views
@@ -326,6 +343,75 @@ class MealApp(tk.Tk):
         elif len(sys.argv) > 1 and sys.argv[1].lower().startswith("ins"):
             self._show("INSIGHTS")
 
+    def _print_set(self, primary):
+        """This view's artwork first, then the rest, de-duplicated by
+        content so the same picture never appears twice in one band."""
+        seen, out = set(), []
+        rest = list(PRINT_POOL)
+        random.shuffle(rest)
+        for name in [primary] + rest:
+            p = th.art(name)
+            if not p:
+                continue
+            h = th.art_hash(p)
+            if h in seen:
+                continue
+            seen.add(h)
+            out.append(p)
+        return out
+
+    # ---------------------------------------------------- doodle scatter
+    def _scatter_doodles(self, container, avoid=(), count=4, smin=52,
+                         smax=82, pad=10, min_h=60, xmax=None, existing=None):
+        """Drop random doodles into whatever room is genuinely free.
+
+        Returns False when the layout is not measured yet, so the caller
+        retries on the next <Configure> instead of scattering blind."""
+        try:
+            container.update_idletasks()
+            w, h = container.winfo_width(), container.winfo_height()
+        except Exception:
+            return False
+        if w < 80 or h < min_h:
+            return False
+        blocked = []
+        for wid in avoid:
+            if wid is None:
+                continue
+            try:
+                if not wid.winfo_ismapped():
+                    return False
+                x, y = wid.winfo_x(), wid.winfo_y()
+                ww, hh = wid.winfo_width(), wid.winfo_height()
+            except Exception:
+                return False
+            if ww <= 1 or hh <= 1:
+                return False
+            blocked.append((x, y, x + ww, y + hh))
+        span = w if xmax is None else min(w, xmax)
+        placed = made = 0
+        boxes = []
+        for _ in range(count * 40):
+            if made >= count:
+                break
+            size = random.randint(smin, smax)
+            x = random.randint(0, max(0, span - size))
+            y = (random.randint(0, h - size) if h >= size
+                 else (h - size) // 2)
+            r = (x, y, x + size, y + size)
+            if any(_overlaps(r, b, pad) for b in blocked):
+                continue
+            if any(_overlaps(r, b, pad) for b in boxes):
+                continue
+            boxes.append(r)
+            widget = th.Doodle(container, doodle=random.choice(DOODLE_KINDS),
+                               size=size)
+            widget.place(x=x, y=y)
+            if existing is not None:
+                existing.append(widget)
+            made += 1
+        return made
+
     def _tab_hover(self, name):
         if name != self.active_view:
             self.tab_ui[name][1].configure(fg=th.INK)
@@ -352,6 +438,19 @@ class MealApp(tk.Tk):
             underline.configure(bg=th.STAMP if active else th.PAPER)
         self.detail_mode = (name == "LOG / EDIT")
         self.refresh_active()
+        self._schedule_scatter()
+
+    def _schedule_scatter(self, _event=None):
+        """Drop doodles as soon as the view has real geometry.
+
+        Driven by <Configure> rather than an after() timer: re-registering
+        a live Tcl command on every tab switch races with itself. A resize
+        invalidates the scatter, since the paper it was placed on moved."""
+        size = (self.paper.winfo_width(), self.paper.winfo_height())
+        if size != getattr(self, "_page_size", None):
+            self._page_size = size
+            self._doodled = set()
+        self._scatter_view()
 
     def _masthead(self, parent, prefix):
         """Paper title block under the banner: eyebrow, Playfair date,
@@ -393,7 +492,7 @@ class MealApp(tk.Tk):
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
-        # scrapbook void: doodle stamps bottom-left, live polaroid right
+        # scrapbook void: random doodles fill the free paper, polaroid right
         self.void = tk.Frame(parent, bg=th.PAPER)
         self.void.pack(fill="both", expand=True, pady=(20, 0))
         _pol = th.art("log.jpg", "bg.jpg")
@@ -401,13 +500,6 @@ class MealApp(tk.Tk):
         if self.polaroid is not None:
             self.polaroid.place(relx=1.0, rely=1.0, anchor="se", x=-16,
                                 y=-8)
-        doodlerow = tk.Frame(self.void, bg=th.PAPER)
-        doodlerow.place(relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
-        th.Doodle(doodlerow, doodle="tangerine").pack(side="left")
-        th.Doodle(doodlerow, doodle="sprig").pack(side="left",
-                                                  padx=(16, 0))
-        th.Doodle(doodlerow, doodle="wheat").pack(side="left",
-                                                  padx=(16, 0))
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -437,6 +529,7 @@ class MealApp(tk.Tk):
         self.log_cards.pack(fill="x")
         sumrow = tk.Frame(parent, bg=th.PAPER)
         sumrow.pack(fill="x", pady=(14, 0))
+        self.log_sealrow = sumrow
         self.log_seal = th.Seal(sumrow, bg=th.PAPER)
         self.log_seal.pack(side="left")
 
@@ -504,6 +597,7 @@ class MealApp(tk.Tk):
         self.ins_allow_head = allow_head
         arow = tk.Frame(body, bg=th.PAPER)
         arow.pack(fill="x", pady=(6, 2))
+        self.ins_allowrow = arow
         self.ins_allow_left = tk.Label(arow, bg=th.PAPER, fg=th.INK,
                                        font=th.display(16))
         self.ins_allow_left.pack(side="left")
@@ -628,38 +722,53 @@ class MealApp(tk.Tk):
             _dno = (now - mc.cycle_start(now)).days + 1
             self.polaroid.set_caption(
                 f"day {_dno:02d} \u2014 {today_e['meals_counted']:g} meals")
-        self._scatter_void()
 
-    def _scatter_void(self):
-        """Doodles spread across the void's real empty middle, above the
-        bottom prints row; fewer when the void runs short, none that can
-        touch content. Runs once per launch."""
-        if getattr(self, "_void_scattered", False):
+    def _scatter_view(self):
+        """Give the live view its doodles into free paper only.
+
+        The page is often still short when the first <Configure> lands, so
+        a partial scatter is thrown away and retried until it fits or the
+        layout stops moving."""
+        done = getattr(self, "_doodled", set())
+        view = self.active_view
+        if view in done:
             return
-        self._void_scattered = True
-        try:
-            self.update_idletasks()
-            h = self.void.winfo_height()
-        except Exception:
-            return
-        top = 16
-        bottom = h - 320
-        if bottom - top < 110:
-            return
-        _kinds = ["tangerine", "sprig", "wheat", "star", "leaf", "chili"]
-        if bottom - top >= 260:
-            spots = [(0.16, 0.30), (0.44, 0.52), (0.70, 0.80)]
-        elif bottom - top >= 170:
-            spots = [(0.20, 0.32), (0.60, 0.72)]
+        kept = getattr(self, "_doodles", {})
+        tries = getattr(self, "_tries", {})
+        for w in kept.get(view, []):
+            try:
+                w.destroy()
+            except Exception:
+                pass
+        kept[view] = []
+
+        if view == "TODAY":
+            if getattr(self, "void", None) is None:
+                return
+            want, opts = 6, dict(smin=54, smax=86, pad=10)
+            keep = 0 if self.polaroid is None else POLAROID_RESERVE
+            opts["xmax"] = max(200, w0(self) - keep)
+            box, avoid = self.void, [self.polaroid]
+        elif view == "LOG / EDIT":
+            if getattr(self, "log_sealrow", None) is None:
+                return
+            want, opts = 3, dict(smin=30, smax=44, pad=8, min_h=18)
+            box, avoid = self.log_sealrow, [self.log_seal]
         else:
-            spots = [(0.40, 0.55)]
-        for _x0, _x1 in spots:
-            th.Doodle(self.void, doodle=random.choice(_kinds),
-                      size=random.randint(56, 72)).place(
-                          relx=random.uniform(_x0, _x1),
-                          rely=random.uniform(top / max(1, h),
-                                          bottom / max(1, h)),
-                          anchor="center")
+            if getattr(self, "ins_allowrow", None) is None:
+                return
+            want = 2
+            opts = dict(smin=30, smax=46, pad=8, min_h=18)
+            box = self.ins_allowrow
+            avoid = [self.ins_allow_left, self.ins_allow_right]
+
+        made = self._scatter_doodles(box, avoid=avoid, count=want,
+                                     existing=kept[view], **opts)
+        self._doodles = kept
+        tries[view] = tries.get(view, 0) + 1
+        self._tries = tries
+        if made >= want or tries[view] >= 15:
+            self._doodled = done | {view}
 
     def refresh_log(self):
         self.log_cards.set_day(self.log_date)

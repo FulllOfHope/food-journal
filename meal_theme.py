@@ -682,6 +682,7 @@ class Doodle(tk.Canvas):
     LEAF = "#5a7a2a"
     LEAF_DK = "#42591d"
     BARK = "#6b4a2f"
+    SPARK = "#d9a441"
     GRAIN = "#d9a441"
     GRAIN_DK = "#8a6a25"
 
@@ -692,7 +693,10 @@ class Doodle(tk.Canvas):
         cx, cy = size / 2, size / 2 + 2
         {"tangerine": self._tangerine,
          "sprig": self._sprig,
-         "wheat": self._wheat}.get(doodle, self._tangerine)(cx, cy)
+         "wheat": self._wheat,
+         "star": self._star,
+         "leaf": self._leaf,
+         "chili": self._chili}.get(doodle, self._tangerine)(cx, cy)
 
     def _tangerine(self, x, y):
         self.create_oval(x - 16, y - 15, x + 16, y + 15, fill=self.FRUIT,
@@ -725,6 +729,30 @@ class Doodle(tk.Canvas):
                                  max(x, gx) + 1, max(y + dy, gy) + 4,
                                  fill=self.GRAIN, outline=self.GRAIN_DK,
                                  width=1.5)
+
+    def _star(self, x, y):
+        r = 15
+        self.create_line(x - r, y, x + r, y, fill=self.SPARK, width=2.5)
+        self.create_line(x, y - r, x, y + r, fill=self.SPARK, width=2.5)
+        self.create_polygon([(x, y - r * 0.55), (x + r * 0.2, y),
+                             (x, y + r * 0.55), (x - r * 0.2, y)],
+                            fill=self.SPARK, outline="")
+
+    def _leaf(self, x, y):
+        self.create_polygon([(x, y - 20), (x + 13, y - 2), (x + 4, y + 18),
+                             (x - 4, y + 18), (x - 13, y - 2)],
+                            fill=self.LEAF, outline=self.LEAF_DK, width=2)
+        self.create_line(x, y - 20, x, y + 18, fill=self.LEAF_DK, width=1.5)
+
+    def _chili(self, x, y):
+        self.create_line(x - 15, y - 6, x - 2, y + 6, x + 13, y - 4,
+                         fill=STAMP, width=7, capstyle="round", smooth=True)
+        self.create_line(x + 13, y - 4, x + 19, y - 14, fill=self.LEAF,
+                         width=2.5)
+        self.create_line(x + 19, y - 14, x + 13, y - 16, fill=self.LEAF,
+                         width=2)
+        self.create_line(x + 19, y - 14, x + 23, y - 18, fill=self.LEAF,
+                         width=2)
 
 
 # ------------------------------------------------------- pencil marks

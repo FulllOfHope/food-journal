@@ -7,6 +7,7 @@ margin ticks, edition numbering and page folios. All domain rules and
 storage live in meal_common; this file only renders and dispatches user
 actions.
 """
+import random
 import sys
 import tkinter as tk
 from datetime import datetime, timedelta
@@ -319,6 +320,12 @@ class MealApp(tk.Tk):
                                      font=th.mono(10))
         self.footer_right.pack(side="right")
 
+        for _lo, _hi in ((0.24, 0.34), (0.50, 0.60), (0.74, 0.84)):
+            th.Doodle(self.paper, doodle=random.choice(_kinds),
+                      size=random.randint(30, 42)).place(
+                          x=46, rely=random.uniform(_lo, _hi),
+                          anchor="center")
+
         self._show("TODAY")
         if len(sys.argv) > 1 and sys.argv[1].lower().startswith("log"):
             self._show("LOG / EDIT")
@@ -356,7 +363,7 @@ class MealApp(tk.Tk):
         """Paper title block under the banner: eyebrow, Playfair date,
         hand note left; folio right."""
         mast = tk.Frame(parent, bg=th.PAPER)
-        mast.pack(fill="x", pady=(10, 0))
+        mast.pack(fill="x", pady=(4, 0))
         left = tk.Frame(mast, bg=th.PAPER)
         left.pack(side="left")
         eb = th.eyebrow(left, "")
@@ -627,6 +634,28 @@ class MealApp(tk.Tk):
             _dno = (now - mc.cycle_start(now)).days + 1
             self.polaroid.set_caption(
                 f"day {_dno:02d} \u2014 {today_e['meals_counted']:g} meals")
+        self._scatter_void()
+
+    def _scatter_void(self):
+        """Two extra doodles floating in the measured free band above the
+        bottom prints row; skipped entirely when the void runs short, so
+        nothing ever overlaps. Runs once per launch."""
+        if getattr(self, "_void_scattered", False):
+            return
+        self._void_scattered = True
+        try:
+            self.update_idletasks()
+            h = self.void.winfo_height()
+        except Exception:
+            return
+        if h < 470:
+            return
+        _kinds = ["tangerine", "sprig", "wheat", "star", "leaf", "chili"]
+        for _x0, _x1 in ((0.52, 0.64), (0.70, 0.82)):
+            th.Doodle(self.void, doodle=random.choice(_kinds),
+                      size=random.randint(52, 64)).place(
+                          relx=random.uniform(_x0, _x1),
+                          rely=random.uniform(0.08, 0.30), anchor="center")
 
     def refresh_log(self):
         self.log_cards.set_day(self.log_date)

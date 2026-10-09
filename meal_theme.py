@@ -671,6 +671,67 @@ class Stamp(tk.Canvas):
             x += wdx
 
 
+# ------------------------------------------------------- doodle stamp
+class DoodleStamp(tk.Canvas):
+    """A rubber-stamp cousin of the EATEN mark for the empty stretches:
+    the same sloped double-rule box and tracked type, but holding a bold
+    hand-drawn veg doodle over a live fact (day, batch, edition)."""
+
+    WIDTH = 124
+    HEIGHT = 104
+
+    def __init__(self, master, doodle="tangerine", bg=PAPER, **kw):
+        super().__init__(master, width=self.WIDTH, height=self.HEIGHT,
+                         bg=bg, highlightthickness=0, bd=0, **kw)
+        self._doodle = doodle
+        self._word = ""
+        self._bg = bg
+        self._font = tkfont.Font(font=("Outfit", 11, "bold"))
+
+    def set(self, word):
+        if word != self._word:
+            self._word = word
+            self.draw()
+
+    def draw(self):
+        self.delete("all")
+        self.configure(bg=self._bg)
+        cx, cy = self.WIDTH / 2, self.HEIGHT / 2 - 6
+        stamp_box(self, cx, cy, 50, 34, STAMP, width=2)
+        {"tangerine": self._tangerine,
+         "sprig": self._sprig,
+         "wheat": self._wheat}.get(self._doodle, self._tangerine)(cx, cy - 8)
+        self.create_text(cx + 1, cy + 22, text=self._word, fill=STAMP,
+                         font=self._font, anchor="center")
+
+    def _tangerine(self, x, y):
+        c = INK
+        self.create_oval(x - 13, y - 12, x + 13, y + 12, outline=c, width=2.5)
+        for dx, dy in ((-9, -11), (-3, -15), (3, -15), (9, -11)):
+            self.create_line(x, y - 11, x + dx, y + dy, fill=c, width=2.5)
+        self.create_line(x + 1, y - 15, x + 1, y - 21, fill=c, width=2.5)
+        self.create_arc(x - 8, y - 7, x - 1, y + 1, start=90, extent=120,
+                        outline=c, width=1.5, style="arc")
+
+    def _sprig(self, x, y):
+        c = INK
+        self.create_line(x, y + 20, x, y - 20, fill=c, width=2.5)
+        for i, dy in enumerate((-12, -2, 8)):
+            side = 1 if i % 2 == 0 else -1
+            self.create_line(x, y + dy, x + side * 13, y + dy - 9, fill=c,
+                             width=2.5)
+            self.create_line(x, y + dy + 5, x - side * 13, y + dy - 4,
+                             fill=c, width=2.5)
+
+    def _wheat(self, x, y):
+        c = INK
+        self.create_line(x, y + 20, x, y - 20, fill=c, width=2.5)
+        for dy in (-14, -6, 2, 10):
+            self.create_line(x, y + dy, x + 10, y + dy - 8, fill=c, width=2)
+            self.create_line(x, y + dy, x - 10, y + dy - 8, fill=c, width=2)
+        self.create_line(x, y - 20, x, y - 26, fill=c, width=2)
+
+
 # ------------------------------------------------------- pencil marks
 class AllowanceBox(tk.Canvas):
     """Miss allowance gauge: one ruled cell per miss, struck
@@ -850,58 +911,6 @@ class Polaroid(tk.Frame):
 
     def set_caption(self, text):
         self._cap.configure(text=text)
-
-
-def perforate(img, teeth_r=8, pitch=17):
-    """Punch a real postage-stamp silhouette: rounded teeth ringing the
-    sheet, then a thin printed frame line inside."""
-    w, h = img.size
-    mask = Image.new("L", (w, h), 0)
-    d = ImageDraw.Draw(mask)
-    d.rectangle((teeth_r, teeth_r, w - teeth_r, h - teeth_r), fill=255)
-    x = teeth_r
-    while x <= w - teeth_r:
-        for y in (teeth_r, h - teeth_r):
-            d.ellipse((x - teeth_r, y - teeth_r, x + teeth_r, y + teeth_r),
-                      fill=255)
-        x += pitch
-    y = teeth_r
-    while y <= h - teeth_r:
-        for x in (teeth_r, w - teeth_r):
-            d.ellipse((x - teeth_r, y - teeth_r, x + teeth_r, y + teeth_r),
-                      fill=255)
-        y += pitch
-    out = img.convert("RGBA")
-    out.putalpha(mask)
-    dd = ImageDraw.Draw(out)
-    dd.rectangle((teeth_r + 5, teeth_r + 5, w - teeth_r - 5,
-                  h - teeth_r - 5), outline=(74, 72, 67, 255), width=1)
-    return out
-
-
-class PostageStamp(tk.Frame):
-    """One of your photos cropped into a real postage stamp: perforated
-    teeth, printed frame line, museum caption beneath. Fixed size."""
-
-    def __init__(self, master, photo, width=130, caption=None, bg=PAPER,
-                 **kw):
-        super().__init__(master, bg=bg, bd=0, highlightthickness=0, **kw)
-        self._label = tk.Label(self, bg=bg, bd=0, highlightthickness=0)
-        self._label.pack()
-        self._cap = tk.Label(self, bg=bg, fg=INK_SOFT, font=hand(13))
-        self._cap.pack(pady=(4, 0))
-        if caption is not None:
-            self._cap.configure(text=caption)
-        self._img = None
-        if photo and _PIL:
-            try:
-                img = Image.open(photo).convert("RGB")
-                h = int(width * 1.25)
-                img = perforate(cover_fit(img, width, h, 0.4))
-                self._img = ImageTk.PhotoImage(img)
-                self._label.configure(image=self._img)
-            except Exception:
-                self._label.configure(text="(photo missing)", fg=PENCIL)
 
 
 class Medallion(tk.Label):

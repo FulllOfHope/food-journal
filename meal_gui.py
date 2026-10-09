@@ -356,14 +356,14 @@ class MealApp(tk.Tk):
         """Paper title block under the banner: eyebrow, Playfair date,
         hand note left; folio right."""
         mast = tk.Frame(parent, bg=th.PAPER)
-        mast.pack(fill="x", pady=(20, 0))
+        mast.pack(fill="x", pady=(16, 0))
         left = tk.Frame(mast, bg=th.PAPER)
         left.pack(side="left")
         eb = th.eyebrow(left, "")
         eb.pack(anchor="w")
         date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(30),
                         anchor="w")
-        date.pack(anchor="w", pady=(12, 6))
+        date.pack(anchor="w", pady=(14, 10))
         note = tk.Label(left, bg=th.PAPER, fg=th.INK_SOFT, font=th.hand(16),
                         anchor="w")
         note.pack(anchor="w", pady=(0, 0))
@@ -392,8 +392,7 @@ class MealApp(tk.Tk):
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
-        # scrapbook void: postage stamps scattered at varied sizes and
-        # heights, each placed, never grid-packed
+        # scrapbook void: doodle stamps bottom-left, live polaroid right
         self.void = tk.Frame(parent, bg=th.PAPER)
         self.void.pack(fill="both", expand=True, pady=(20, 0))
         _pol = th.art("log.jpg", "bg.jpg")
@@ -401,23 +400,14 @@ class MealApp(tk.Tk):
         if self.polaroid is not None:
             self.polaroid.place(relx=1.0, rely=1.0, anchor="se", x=-16,
                                 y=-8)
-        _g1 = th.art("extra-grove-fl.jpg")
-        _g3 = th.art("insights.jpg", "bg.jpg")
-        if _g1 or _g3:
-            frontrow = tk.Frame(self.void, bg=th.PAPER)
-            frontrow.place(relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
-            if _g1:
-                th.PostageStamp(frontrow, photo=_g1, width=132,
-                                caption="florida \u00b7 1925").pack(
-                                    side="left")
-            if _g3:
-                th.PostageStamp(frontrow, photo=_g3, width=118).pack(
-                    side="left", padx=(16, 0))
-        _g2 = th.art("extra-grove-ormond.jpg")
-        if _g2:
-            th.PostageStamp(self.void, photo=_g2, width=122,
-                            caption="ormond \u00b7 c.1905").place(
-                                relx=0.30, rely=0.60, anchor="sw")
+        doodlerow = tk.Frame(self.void, bg=th.PAPER)
+        doodlerow.place(relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
+        self.dst_day = th.DoodleStamp(doodlerow, doodle="tangerine")
+        self.dst_day.pack(side="left")
+        self.dst_batch = th.DoodleStamp(doodlerow, doodle="sprig")
+        self.dst_batch.pack(side="left", padx=(14, 0))
+        self.dst_ed = th.DoodleStamp(doodlerow, doodle="wheat")
+        self.dst_ed.pack(side="left", padx=(14, 0))
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -599,6 +589,7 @@ class MealApp(tk.Tk):
         day_no = (now - cs).days + 1
         total_days = mc.cycle_days(now)
         batch = mc.batch_of(now)
+        ed = cycle_edition(cs)
         over = a["over"] > 0
 
         # TODAY headings live on paper beneath the photo
@@ -613,6 +604,9 @@ class MealApp(tk.Tk):
                   f"\u2014 over by {a['over']:g}, mind the stamp"),
             fg=th.INK_SOFT if not over else th.STAMP)
         self.today_folio.configure(text=f"p. {day_no:02d}")
+        self.dst_day.set(f"DAY {day_no:02d}")
+        self.dst_batch.set(f"BATCH {batch}")
+        self.dst_ed.set(f"No. {ed:02d}")
 
         self.footer_left.configure(
             text=(f"Cycle {cs.strftime('%d %b')} \u2013 "

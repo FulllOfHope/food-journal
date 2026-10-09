@@ -47,19 +47,28 @@ def load_config():
     cfg_path = CONFIG_DIR / "config.ini"
     if cfg_path.exists():
         cfg.read(cfg_path)
-    s = cfg["settings"] if "settings" in cfg else {}
+    if "settings" in cfg:
+        s = cfg["settings"]
+        getb = lambda k, d: s.getboolean(k, fallback=d)
+        geti = lambda k, d: s.getint(k, fallback=d)
+        getf = lambda k, d: s.getfloat(k, fallback=d)
+        get = lambda k, d: s.get(k, fallback=d)
+    else:
+        # fresh install with no config file yet: every lookup falls
+        # back to its default instead of crashing on a bare dict
+        getb = geti = getf = get = lambda key, default: default
     return {
-        "remind_breakfast": s.getboolean("remind_breakfast", True),
-        "remind_lunch": s.getboolean("remind_lunch", True),
-        "remind_dinner": s.getboolean("remind_dinner", True),
-        "notification_timeout_seconds": s.getint("notification_timeout_seconds", 10),
-        "poll_interval_minutes": s.getint("poll_interval_minutes", 15),
-        "nag_until": s.get("nag_until", "23:30"),
-        "price_breakfast": s.getfloat("price_breakfast", 27.61),
-        "price_lunch": s.getfloat("price_lunch", 50.48),
-        "price_dinner": s.getfloat("price_dinner", 50.48),
-        "tax_percent": s.getfloat("tax_percent", 5.0),
-        "allowed_misses_per_month": s.getint("allowed_misses_per_month", 25),
+        "remind_breakfast": getb("remind_breakfast", True),
+        "remind_lunch": getb("remind_lunch", True),
+        "remind_dinner": getb("remind_dinner", True),
+        "notification_timeout_seconds": geti("notification_timeout_seconds", 10),
+        "poll_interval_minutes": geti("poll_interval_minutes", 15),
+        "nag_until": get("nag_until", "23:30"),
+        "price_breakfast": getf("price_breakfast", 27.61),
+        "price_lunch": getf("price_lunch", 50.48),
+        "price_dinner": getf("price_dinner", 50.48),
+        "tax_percent": getf("tax_percent", 5.0),
+        "allowed_misses_per_month": geti("allowed_misses_per_month", 25),
     }
 
 def _hhmm(value: str, fallback=(23, 30)):
@@ -94,6 +103,7 @@ def load_history():
         return {}
 
 def save_history(h):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=DATA_DIR)
     try:
         with os.fdopen(fd, "w") as f:

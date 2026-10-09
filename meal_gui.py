@@ -320,6 +320,9 @@ class MealApp(tk.Tk):
                                      font=th.mono(10))
         self.footer_right.pack(side="right")
 
+        # margin + void doodles, reshuffled every launch inside safe
+        # zones: the spine gutter and the void's upper half never hold text
+        _kinds = ["tangerine", "sprig", "wheat", "star", "leaf", "chili"]
         for _lo, _hi in ((0.24, 0.34), (0.50, 0.60), (0.74, 0.84)):
             th.Doodle(self.paper, doodle=random.choice(_kinds),
                       size=random.randint(30, 42)).place(

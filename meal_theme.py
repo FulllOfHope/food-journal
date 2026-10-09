@@ -820,7 +820,8 @@ class Polaroid(tk.Frame):
     border and a handwritten caption carrying real day facts. Fixed
     size, so it never flickers or shifts the layout."""
 
-    def __init__(self, master, photo=None, width=280, bg=PAPER, **kw):
+    def __init__(self, master, photo=None, width=280, bg=PAPER,
+                 caption=None, **kw):
         super().__init__(master, bg="#fbf7ec", bd=0, highlightthickness=1,
                          highlightbackground=RULE_DK, **kw)
         self._label = tk.Label(self, bg="#fbf7ec", bd=0, highlightthickness=0)
@@ -828,6 +829,8 @@ class Polaroid(tk.Frame):
         self._cap = tk.Label(self, bg="#fbf7ec", fg=INK_SOFT,
                              font=hand(14))
         self._cap.pack(pady=(0, 10))
+        if caption is not None:
+            self._cap.configure(text=caption)
         if photo and _PIL:
             try:
                 img = Image.open(photo).convert("RGB")
@@ -895,33 +898,27 @@ def _hover_scroll_target(widget):
 
 
 def _hover_scroll(event):
-    canvas = _hover_scroll_target(event.widget)
-    if canvas is None:
-        return None
-    try:
-        tall = canvas.winfo_height() < canvas.inner.winfo_reqheight()
-    except Exception:
-        return None
-    if not tall:
+    frame = _hover_scroll_target(event.widget)
+    if frame is None:
         return None
     if getattr(event, "num", 0) == 4:
-        steps = -2
+        steps = -1
     elif getattr(event, "num", 0) == 5:
-        steps = 2
+        steps = 1
     else:
         delta = getattr(event, "delta", 0) or 0
-        steps = -2 if delta > 0 else 2
+        steps = -1 if delta > 0 else 1
     try:
-        canvas.yview_scroll(steps, "units")
+        frame.smooth_scroll(steps)
     except Exception:
         return None
     return "break"
 
 
 def register_hover_scroll(frame):
-    """Route the wheel to this frame's canvas whenever the pointer is
-    anywhere over it - no scrollbar grabbing, no clicking first."""
-    _HOVER_CANVASES.append(frame.canvas)
+    """Route the wheel to this frame whenever the pointer is anywhere
+    over it - no scrollbar grabbing, no clicking first."""
+    _HOVER_CANVASES.append(frame)
     if not _HOVER_BOUND:
         _HOVER_BOUND.append(True)
         frame.canvas.bind_all("<Button-4>", _hover_scroll, add="+")
@@ -944,12 +941,53 @@ class ScrollFrame(tk.Frame):
         self._win = self.canvas.create_window((0, 0), window=self.inner,
                                               anchor="nw")
         self._win_h = None
+        self._anim = None
+        self._target = 0.0
         self.canvas.configure(yscrollcommand=self._on_scroll)
         self.canvas.pack(side="left", fill="both", expand=True)
         self.canvas.inner = self.inner
         self.inner.bind("<Configure>", self._on_inner)
         self.canvas.bind("<Configure>", self._on_canvas)
         register_hover_scroll(self)
+
+    def smooth_scroll(self, steps):
+        """Glide toward the target instead of jumping: wheel notches
+        accumulate into one eased motion."""
+        try:
+            total = self.inner.winfo_reqheight()
+            h = self.canvas.winfo_height()
+        except Exception:
+            return
+        if total <= h + 2:
+            return
+        if self._anim is None:
+            try:
+                self._target = self.canvas.yview()[0]
+            except Exception:
+                return
+        self._target = min(1.0, max(0.0, self._target + steps * 60.0 /
+                                    max(1, total - h)))
+        if self._anim is None:
+            self._step_smooth()
+
+    def _step_smooth(self):
+        self._anim = None
+        try:
+            cur = self.canvas.yview()[0]
+        except Exception:
+            return
+        diff = self._target - cur
+        if abs(diff) < 0.0006:
+            try:
+                self.canvas.yview_moveto(self._target)
+            except Exception:
+                pass
+            return
+        try:
+            self.canvas.yview_moveto(cur + diff * 0.35)
+        except Exception:
+            return
+        self._anim = self.after(16, self._step_smooth)
 
     def _on_scroll(self, first, last):
         try:

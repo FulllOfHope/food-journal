@@ -392,6 +392,8 @@ class MealApp(tk.Tk):
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
+        # scrapbook void: prints scattered at varied sizes and
+        # heights, each placed, never grid-packed
         self.void = tk.Frame(parent, bg=th.PAPER)
         self.void.pack(fill="both", expand=True, pady=(20, 0))
         _pol = th.art("log.jpg", "bg.jpg")
@@ -399,14 +401,20 @@ class MealApp(tk.Tk):
         if self.polaroid is not None:
             self.polaroid.place(relx=1.0, rely=1.0, anchor="se", x=-16,
                                 y=-8)
-        _g1, _g2 = th.art("extra-grove-fl.jpg"), th.art(
-            "extra-grove-ormond.jpg")
-        if _g1 and _g2:
-            gallery = tk.Frame(self.void, bg=th.PAPER)
-            gallery.place(relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
-            th.Polaroid(gallery, photo=_g1, width=168).pack(
-                side="left", padx=(0, 14))
-            th.Polaroid(gallery, photo=_g2, width=168).pack(side="left")
+        _g1 = th.art("extra-grove-fl.jpg")
+        if _g1:
+            th.Polaroid(self.void, photo=_g1, width=168,
+                        caption="florida \u00b7 1925").place(
+                            relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
+        _g2 = th.art("extra-grove-ormond.jpg")
+        if _g2:
+            th.Polaroid(self.void, photo=_g2, width=150,
+                        caption="ormond \u00b7 c.1905").place(
+                            relx=0.10, rely=0.60, anchor="sw")
+        _g3 = th.art("insights.jpg", "bg.jpg")
+        if _g3:
+            th.Polaroid(self.void, photo=_g3, width=150).place(
+                relx=0.40, rely=0.50, anchor="center")
 
     def _set_all_today(self, value):
         now = mc.today()

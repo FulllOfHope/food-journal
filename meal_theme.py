@@ -672,64 +672,59 @@ class Stamp(tk.Canvas):
 
 
 # ------------------------------------------------------- doodle stamp
-class DoodleStamp(tk.Canvas):
-    """A rubber-stamp cousin of the EATEN mark for the empty stretches:
-    the same sloped double-rule box and tracked type, but holding a bold
-    hand-drawn veg doodle over a live fact (day, batch, edition)."""
+class Doodle(tk.Canvas):
+    """A bare hand-drawn veg doodle for the empty stretches: flat
+    storybook fills with depth, no box, no words. Static art."""
 
-    WIDTH = 124
-    HEIGHT = 104
+    FRUIT = "#c96a24"
+    FRUIT_DK = "#96501c"
+    FRUIT_HI = "#f2c078"
+    LEAF = "#5a7a2a"
+    LEAF_DK = "#42591d"
+    BARK = "#6b4a2f"
+    GRAIN = "#d9a441"
+    GRAIN_DK = "#8a6a25"
 
-    def __init__(self, master, doodle="tangerine", bg=PAPER, **kw):
-        super().__init__(master, width=self.WIDTH, height=self.HEIGHT,
-                         bg=bg, highlightthickness=0, bd=0, **kw)
-        self._doodle = doodle
-        self._word = ""
-        self._bg = bg
-        self._font = tkfont.Font(font=("Outfit", 11, "bold"))
-
-    def set(self, word):
-        if word != self._word:
-            self._word = word
-            self.draw()
-
-    def draw(self):
-        self.delete("all")
-        self.configure(bg=self._bg)
-        cx, cy = self.WIDTH / 2, self.HEIGHT / 2 - 6
-        stamp_box(self, cx, cy, 50, 34, STAMP, width=2)
+    def __init__(self, master, doodle="tangerine", size=110, bg=PAPER,
+                 **kw):
+        super().__init__(master, width=size, height=size, bg=bg,
+                         highlightthickness=0, bd=0, **kw)
+        cx, cy = size / 2, size / 2 + 2
         {"tangerine": self._tangerine,
          "sprig": self._sprig,
-         "wheat": self._wheat}.get(self._doodle, self._tangerine)(cx, cy - 8)
-        self.create_text(cx + 1, cy + 22, text=self._word, fill=STAMP,
-                         font=self._font, anchor="center")
+         "wheat": self._wheat}.get(doodle, self._tangerine)(cx, cy)
 
     def _tangerine(self, x, y):
-        c = INK
-        self.create_oval(x - 13, y - 12, x + 13, y + 12, outline=c, width=2.5)
-        for dx, dy in ((-9, -11), (-3, -15), (3, -15), (9, -11)):
-            self.create_line(x, y - 11, x + dx, y + dy, fill=c, width=2.5)
-        self.create_line(x + 1, y - 15, x + 1, y - 21, fill=c, width=2.5)
-        self.create_arc(x - 8, y - 7, x - 1, y + 1, start=90, extent=120,
-                        outline=c, width=1.5, style="arc")
+        self.create_oval(x - 16, y - 15, x + 16, y + 15, fill=self.FRUIT,
+                         outline=self.FRUIT_DK, width=2.5)
+        self.create_oval(x - 9, y - 11, x - 2, y - 4, fill=self.FRUIT_HI,
+                         outline="")
+        for dx, dy in ((-11, -13), (-4, -18), (4, -18), (11, -13)):
+            self.create_line(x, y - 14, x + dx, y + dy, fill=self.LEAF,
+                             width=2.5)
+        self.create_line(x + 1, y - 18, x + 1, y - 25, fill=self.LEAF,
+                         width=2.5)
 
     def _sprig(self, x, y):
-        c = INK
-        self.create_line(x, y + 20, x, y - 20, fill=c, width=2.5)
-        for i, dy in enumerate((-12, -2, 8)):
+        self.create_line(x, y + 24, x, y - 24, fill=self.BARK, width=2.5)
+        for i, dy in enumerate((-14, -2, 10)):
             side = 1 if i % 2 == 0 else -1
-            self.create_line(x, y + dy, x + side * 13, y + dy - 9, fill=c,
-                             width=2.5)
-            self.create_line(x, y + dy + 5, x - side * 13, y + dy - 4,
-                             fill=c, width=2.5)
+            for sgn in (side, -side):
+                lx, ly = x + sgn * 14, y + dy - 8
+                self.create_oval(min(x, lx) - 1, min(y + dy, ly) - 4,
+                                 max(x, lx) + 1, max(y + dy, ly) + 4,
+                                 fill=self.LEAF, outline=self.LEAF_DK,
+                                 width=1.5)
 
     def _wheat(self, x, y):
-        c = INK
-        self.create_line(x, y + 20, x, y - 20, fill=c, width=2.5)
-        for dy in (-14, -6, 2, 10):
-            self.create_line(x, y + dy, x + 10, y + dy - 8, fill=c, width=2)
-            self.create_line(x, y + dy, x - 10, y + dy - 8, fill=c, width=2)
-        self.create_line(x, y - 20, x, y - 26, fill=c, width=2)
+        self.create_line(x, y + 24, x, y - 24, fill=self.BARK, width=2.5)
+        for dy in (-16, -7, 2, 11):
+            for sgn in (1, -1):
+                gx, gy = x + sgn * 11, y + dy - 7
+                self.create_oval(min(x, gx) - 1, min(y + dy, gy) - 4,
+                                 max(x, gx) + 1, max(y + dy, gy) + 4,
+                                 fill=self.GRAIN, outline=self.GRAIN_DK,
+                                 width=1.5)
 
 
 # ------------------------------------------------------- pencil marks

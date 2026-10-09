@@ -356,7 +356,7 @@ class MealApp(tk.Tk):
         """Paper title block under the banner: eyebrow, Playfair date,
         hand note left; folio right."""
         mast = tk.Frame(parent, bg=th.PAPER)
-        mast.pack(fill="x", pady=(16, 0))
+        mast.pack(fill="x", pady=(10, 0))
         left = tk.Frame(mast, bg=th.PAPER)
         left.pack(side="left")
         eb = th.eyebrow(left, "")
@@ -402,12 +402,11 @@ class MealApp(tk.Tk):
                                 y=-8)
         doodlerow = tk.Frame(self.void, bg=th.PAPER)
         doodlerow.place(relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
-        self.dst_day = th.DoodleStamp(doodlerow, doodle="tangerine")
-        self.dst_day.pack(side="left")
-        self.dst_batch = th.DoodleStamp(doodlerow, doodle="sprig")
-        self.dst_batch.pack(side="left", padx=(14, 0))
-        self.dst_ed = th.DoodleStamp(doodlerow, doodle="wheat")
-        self.dst_ed.pack(side="left", padx=(14, 0))
+        th.Doodle(doodlerow, doodle="tangerine").pack(side="left")
+        th.Doodle(doodlerow, doodle="sprig").pack(side="left",
+                                                  padx=(16, 0))
+        th.Doodle(doodlerow, doodle="wheat").pack(side="left",
+                                                  padx=(16, 0))
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -589,7 +588,6 @@ class MealApp(tk.Tk):
         day_no = (now - cs).days + 1
         total_days = mc.cycle_days(now)
         batch = mc.batch_of(now)
-        ed = cycle_edition(cs)
         over = a["over"] > 0
 
         # TODAY headings live on paper beneath the photo
@@ -604,9 +602,6 @@ class MealApp(tk.Tk):
                   f"\u2014 over by {a['over']:g}, mind the stamp"),
             fg=th.INK_SOFT if not over else th.STAMP)
         self.today_folio.configure(text=f"p. {day_no:02d}")
-        self.dst_day.set(f"DAY {day_no:02d}")
-        self.dst_batch.set(f"BATCH {batch}")
-        self.dst_ed.set(f"No. {ed:02d}")
 
         self.footer_left.configure(
             text=(f"Cycle {cs.strftime('%d %b')} \u2013 "

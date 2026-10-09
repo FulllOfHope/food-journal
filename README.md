@@ -29,6 +29,7 @@ cd ~/bhu_meal_tracker && ./install.sh
 ## Usage
 
 - `bhu-meal-tracker gui` — the Mess Ledger journal GUI
+- `python3 ~/bhu_meal_tracker/meal_web.py` — phone companion (below)
 - `bhu-meal-tracker remind` — prompt once for today's meals
 - `bhu-meal-tracker analytics` — week/month/year summary
 - `bhu-meal-tracker tray` — system tray menu
@@ -46,7 +47,7 @@ Three views on dot-grid journal paper (stitched spine, margin rule):
   with `< YESTERDAY` / `TOMORROW >` (or arrow keys). Below, the leaves of
   the current cycle carry hand-drawn margin ticks; the cycle opening is
   marked and earlier days are flagged `(Previous Cycle)`.
-- **INSIGHTS** — the 25-miss pencil box (X per miss, slash per half-miss,
+- **INSIGHTS** — the 25-miss allowance box (X per miss, slash per half-miss,
   red once over), the cycle bill split by batch, and meals entered per day
   on graph paper.
 
@@ -90,7 +91,7 @@ cycle the bill only covers what has elapsed.
 
 ## Missed-meal allowance
 
-You may miss up to **25 meals per cycle**. The INSIGHTS pencil box shows
+You may miss up to **25 meals per cycle**. The INSIGHTS allowance box shows
 misses struck so far and how many remain; overflow is stamped red, and the
 lines under it break the misses down per batch.
 
@@ -102,7 +103,7 @@ Misses are counted in **meal credits**, not servings:
 | Lunch | 1.0 (2.0 on Saturday) |
 | Dinner | 1.0 (0.0 on Saturday — not served) |
 
-So skipping breakfast alone costs half a miss, the pencil box draws that as
+So skipping breakfast alone costs half a miss, the allowance box draws that as
 a single slash, and the totals can be fractional such as `23.5 remaining`.
 
 Billing is separate and still charges whole servings, because that is what the
@@ -114,7 +115,7 @@ installing mid-cycle does not count earlier days against you.
 ## Theme
 
 `meal_theme.py` holds the journal system (paper/grain/dot-grid canvas,
-rubber stamps, pencil boxes, letterpress buttons) and `meal_charts.py`
+rubber stamps, the miss allowance, letterpress buttons) and `meal_charts.py`
 the canvas charts. Fonts are detected at startup, preferring Playfair
 Display (mastheads), Outfit (body), DM Mono (metadata) and Caveat (margin
 notes), falling back to installed serif/sans/mono families:
@@ -190,3 +191,20 @@ drop it from the prompt entirely (its value stays in the history).
 ## Data
 
 Stored in `~/.local/share/bhu_meal_tracker/history.json`.
+
+## Phone (no cloud needed)
+
+The desktop app can't run on a phone, so `meal_web.py` serves a tiny
+touch page (stdlib only, no dependencies) with three big meal buttons
+reading and writing the same history file:
+
+```bash
+python3 ~/bhu_meal_tracker/meal_web.py
+# Mess Ledger on your phone:  http://192.168.1.5:8137/
+```
+
+Join your home Wi-Fi on the phone, open the printed URL, tap meals.
+Both stay in sync instantly because it is one file. Caveat, stated
+plainly: anyone on your Wi-Fi can open the page, so never expose the
+port beyond your local network. For away-from-home sync with no cloud
+account, pair this with Syncthing on the data directory.

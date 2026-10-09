@@ -2,7 +2,7 @@
 """Meal tracker GUI: TODAY, LOG / EDIT, INSIGHTS.
 
 The Mess Ledger: a bound paper journal. Entry mastheads with margin
-notes, rubber-stamp meal states, pencil-box allowance marks, hand-drawn
+notes, rubber-stamp states, a ruled miss allowance, hand-drawn
 margin ticks, edition numbering and page folios. All domain rules and
 storage live in meal_common; this file only renders and dispatches user
 actions.
@@ -337,7 +337,7 @@ class MealApp(tk.Tk):
         self.active_view = name
         for n, f in self.views.items():
             if n == name:
-                f.pack(fill="both", expand=True, padx=GUTTER, pady=(18, 0))
+                f.pack(fill="both", expand=True, padx=GUTTER, pady=(26, 0))
             else:
                 f.pack_forget()
         for n, b in self.banners.items():
@@ -356,17 +356,17 @@ class MealApp(tk.Tk):
         """Paper title block under the banner: eyebrow, Playfair date,
         hand note left; folio right."""
         mast = tk.Frame(parent, bg=th.PAPER)
-        mast.pack(fill="x", pady=(14, 0))
+        mast.pack(fill="x", pady=(24, 4))
         left = tk.Frame(mast, bg=th.PAPER)
         left.pack(side="left")
         eb = th.eyebrow(left, "")
         eb.pack(anchor="w")
         date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(30),
                         anchor="w")
-        date.pack(anchor="w", pady=(2, 0))
+        date.pack(anchor="w", pady=(6, 2))
         note = tk.Label(left, bg=th.PAPER, fg=th.INK_SOFT, font=th.hand(16),
                         anchor="w")
-        note.pack(anchor="w", pady=(2, 0))
+        note.pack(anchor="w", pady=(6, 2))
         folio = tk.Label(mast, bg=th.PAPER, fg=th.PENCIL, font=th.mono(12))
         folio.pack(side="right", anchor="n")
         setattr(self, prefix + "_eb", eb)
@@ -403,18 +403,18 @@ class MealApp(tk.Tk):
                                 y=-8)
         _g1 = th.art("extra-grove-fl.jpg")
         if _g1:
-            th.Polaroid(self.void, photo=_g1, width=168,
+            th.Polaroid(self.void, photo=_g1, width=220,
                         caption="florida \u00b7 1925").place(
                             relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
         _g2 = th.art("extra-grove-ormond.jpg")
         if _g2:
-            th.Polaroid(self.void, photo=_g2, width=150,
+            th.Polaroid(self.void, photo=_g2, width=190,
                         caption="ormond \u00b7 c.1905").place(
-                            relx=0.10, rely=0.60, anchor="sw")
+                            relx=0.24, rely=0.68, anchor="sw")
         _g3 = th.art("insights.jpg", "bg.jpg")
         if _g3:
-            th.Polaroid(self.void, photo=_g3, width=150).place(
-                relx=0.40, rely=0.50, anchor="center")
+            th.Polaroid(self.void, photo=_g3, width=190).place(
+                relx=0.47, rely=0.58, anchor="center")
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -507,7 +507,7 @@ class MealApp(tk.Tk):
         self._masthead(body, "ins")
         allow_head = tk.Label(body, bg=th.PAPER, fg=th.PENCIL,
                               font=th.mono(10))
-        allow_head.pack(anchor="w", pady=(2, 0))
+        allow_head.pack(anchor="w", pady=(6, 2))
         self.ins_allow_head = allow_head
         arow = tk.Frame(body, bg=th.PAPER)
         arow.pack(fill="x", pady=(6, 2))
@@ -517,8 +517,8 @@ class MealApp(tk.Tk):
         self.ins_allow_right = tk.Label(arow, bg=th.PAPER, fg=th.INK_SOFT,
                                         font=th.mono(11))
         self.ins_allow_right.pack(side="right")
-        self.pencilbox = th.PencilBox(body, bg=th.PAPER)
-        self.pencilbox.pack(fill="x", pady=(4, 6))
+        self.allowance = th.AllowanceBox(body, bg=th.PAPER)
+        self.allowance.pack(fill="x", pady=(4, 6))
         self.ins_b1 = tk.Label(body, bg=th.PAPER, fg=th.INK_SOFT,
                                font=th.mono(11))
         self.ins_b1.pack(anchor="w")
@@ -604,7 +604,7 @@ class MealApp(tk.Tk):
         self.today_date.configure(text=now.strftime("%d %B %Y"))
         self.today_note.configure(
             text=(f"day {day_no} of {total_days} \u00b7 batch {batch} "
-                  f"\u2014 {a['remaining']:g} left in the pencil box"
+                  f"\u2014 {a['remaining']:g} misses left"
                   if not over else
                   f"day {day_no} of {total_days} \u00b7 batch {batch} "
                   f"\u2014 over by {a['over']:g}, mind the stamp"),
@@ -828,15 +828,15 @@ class MealApp(tk.Tk):
         self.ins_folio.configure(
             text=f"p. {day_no:02d}")
         self.ins_allow_head.configure(
-            text=f"PENCIL BOX \u2014 {a['allowed']:g} MISSES ALLOWED")
+            text=f"MISS ALLOWANCE \u2014 {a['allowed']:g} ALLOWED")
         self.ins_allow_left.configure(
-            text=(f"{a['remaining']:g} left in the box" if not over
+            text=(f"{a['remaining']:g} remaining" if not over
                   else f"Over by {a['over']:g}"),
             fg=th.STAMP if over else th.INK)
         self.ins_allow_right.configure(
             text=f"{a['missed']:g} struck", fg=th.STAMP if over
             else th.INK_SOFT)
-        self.pencilbox.set_value(a["missed"], a["allowed"])
+        self.allowance.set_value(a["missed"], a["allowed"])
         b1s, b1e = mc.batch_range(1, now)
         b2s, b2e = mc.batch_range(2, now)
         b1 = mc.allowance_status(scope=1)

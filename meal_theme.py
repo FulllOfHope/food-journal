@@ -3,7 +3,7 @@
 Warm paper with grain and dot-grid ruling, a stitched spine, Playfair
 entry mastheads set directly over your artwork (washed warm with a baked
 scrim for legibility), Caveat margin notes, rubber-stamp states and a
-pencil-box allowance. Put photos in art/ (today.jpg, log.jpg,
+a ruled miss allowance. Put photos in art/ (today.jpg, log.jpg,
 insights.jpg, or a single bg.jpg) — without them the banners fall back
 to plain paper and ink.
 
@@ -672,8 +672,8 @@ class Stamp(tk.Canvas):
 
 
 # ------------------------------------------------------- pencil marks
-class PencilBox(tk.Canvas):
-    """Allowance gauge as a pencil box: one ruled cell per miss, struck
+class AllowanceBox(tk.Canvas):
+    """Miss allowance gauge: one ruled cell per miss, struck
     through with hand X marks (half misses get a single slash). Overflow
     past the allowance is stamped red."""
 

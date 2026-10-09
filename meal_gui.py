@@ -356,17 +356,17 @@ class MealApp(tk.Tk):
         """Paper title block under the banner: eyebrow, Playfair date,
         hand note left; folio right."""
         mast = tk.Frame(parent, bg=th.PAPER)
-        mast.pack(fill="x", pady=(24, 4))
+        mast.pack(fill="x", pady=(30, 6))
         left = tk.Frame(mast, bg=th.PAPER)
         left.pack(side="left")
         eb = th.eyebrow(left, "")
         eb.pack(anchor="w")
         date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(30),
                         anchor="w")
-        date.pack(anchor="w", pady=(6, 2))
+        date.pack(anchor="w", pady=(10, 4))
         note = tk.Label(left, bg=th.PAPER, fg=th.INK_SOFT, font=th.hand(16),
                         anchor="w")
-        note.pack(anchor="w", pady=(6, 2))
+        note.pack(anchor="w", pady=(2, 8))
         folio = tk.Label(mast, bg=th.PAPER, fg=th.PENCIL, font=th.mono(12))
         folio.pack(side="right", anchor="n")
         setattr(self, prefix + "_eb", eb)
@@ -402,19 +402,21 @@ class MealApp(tk.Tk):
             self.polaroid.place(relx=1.0, rely=1.0, anchor="se", x=-16,
                                 y=-8)
         _g1 = th.art("extra-grove-fl.jpg")
-        if _g1:
-            th.Polaroid(self.void, photo=_g1, width=220,
-                        caption="florida \u00b7 1925").place(
-                            relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
+        _g3 = th.art("insights.jpg", "bg.jpg")
+        if _g1 or _g3:
+            frontrow = tk.Frame(self.void, bg=th.PAPER)
+            frontrow.place(relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
+            if _g1:
+                th.Polaroid(frontrow, photo=_g1, width=220,
+                            caption="florida \u00b7 1925").pack(side="left")
+            if _g3:
+                th.Polaroid(frontrow, photo=_g3, width=150).pack(
+                    side="left", padx=(14, 0))
         _g2 = th.art("extra-grove-ormond.jpg")
         if _g2:
             th.Polaroid(self.void, photo=_g2, width=190,
                         caption="ormond \u00b7 c.1905").place(
-                            relx=0.24, rely=0.68, anchor="sw")
-        _g3 = th.art("insights.jpg", "bg.jpg")
-        if _g3:
-            th.Polaroid(self.void, photo=_g3, width=190).place(
-                relx=0.47, rely=0.58, anchor="center")
+                            relx=0.30, rely=0.62, anchor="sw")
 
     def _set_all_today(self, value):
         now = mc.today()

@@ -337,7 +337,7 @@ class MealApp(tk.Tk):
         self.active_view = name
         for n, f in self.views.items():
             if n == name:
-                f.pack(fill="both", expand=True, padx=GUTTER, pady=(26, 0))
+                f.pack(fill="both", expand=True, padx=GUTTER, pady=(24, 0))
             else:
                 f.pack_forget()
         for n, b in self.banners.items():
@@ -356,19 +356,19 @@ class MealApp(tk.Tk):
         """Paper title block under the banner: eyebrow, Playfair date,
         hand note left; folio right."""
         mast = tk.Frame(parent, bg=th.PAPER)
-        mast.pack(fill="x", pady=(30, 6))
+        mast.pack(fill="x", pady=(20, 0))
         left = tk.Frame(mast, bg=th.PAPER)
         left.pack(side="left")
         eb = th.eyebrow(left, "")
         eb.pack(anchor="w")
         date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(30),
                         anchor="w")
-        date.pack(anchor="w", pady=(10, 4))
+        date.pack(anchor="w", pady=(12, 6))
         note = tk.Label(left, bg=th.PAPER, fg=th.INK_SOFT, font=th.hand(16),
                         anchor="w")
-        note.pack(anchor="w", pady=(2, 8))
+        note.pack(anchor="w", pady=(0, 0))
         folio = tk.Label(mast, bg=th.PAPER, fg=th.PENCIL, font=th.mono(12))
-        folio.pack(side="right", anchor="n")
+        folio.pack(side="right")
         setattr(self, prefix + "_eb", eb)
         setattr(self, prefix + "_date", date)
         setattr(self, prefix + "_note", note)
@@ -392,7 +392,7 @@ class MealApp(tk.Tk):
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
-        # scrapbook void: prints scattered at varied sizes and
+        # scrapbook void: postage stamps scattered at varied sizes and
         # heights, each placed, never grid-packed
         self.void = tk.Frame(parent, bg=th.PAPER)
         self.void.pack(fill="both", expand=True, pady=(20, 0))
@@ -407,16 +407,17 @@ class MealApp(tk.Tk):
             frontrow = tk.Frame(self.void, bg=th.PAPER)
             frontrow.place(relx=0.0, rely=1.0, anchor="sw", x=0, y=-8)
             if _g1:
-                th.Polaroid(frontrow, photo=_g1, width=220,
-                            caption="florida \u00b7 1925").pack(side="left")
+                th.PostageStamp(frontrow, photo=_g1, width=132,
+                                caption="florida \u00b7 1925").pack(
+                                    side="left")
             if _g3:
-                th.Polaroid(frontrow, photo=_g3, width=150).pack(
-                    side="left", padx=(14, 0))
+                th.PostageStamp(frontrow, photo=_g3, width=118).pack(
+                    side="left", padx=(16, 0))
         _g2 = th.art("extra-grove-ormond.jpg")
         if _g2:
-            th.Polaroid(self.void, photo=_g2, width=190,
-                        caption="ormond \u00b7 c.1905").place(
-                            relx=0.30, rely=0.62, anchor="sw")
+            th.PostageStamp(self.void, photo=_g2, width=122,
+                            caption="ormond \u00b7 c.1905").place(
+                                relx=0.30, rely=0.60, anchor="sw")
 
     def _set_all_today(self, value):
         now = mc.today()

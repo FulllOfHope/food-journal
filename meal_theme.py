@@ -852,6 +852,58 @@ class Polaroid(tk.Frame):
         self._cap.configure(text=text)
 
 
+def perforate(img, teeth_r=8, pitch=17):
+    """Punch a real postage-stamp silhouette: rounded teeth ringing the
+    sheet, then a thin printed frame line inside."""
+    w, h = img.size
+    mask = Image.new("L", (w, h), 0)
+    d = ImageDraw.Draw(mask)
+    d.rectangle((teeth_r, teeth_r, w - teeth_r, h - teeth_r), fill=255)
+    x = teeth_r
+    while x <= w - teeth_r:
+        for y in (teeth_r, h - teeth_r):
+            d.ellipse((x - teeth_r, y - teeth_r, x + teeth_r, y + teeth_r),
+                      fill=255)
+        x += pitch
+    y = teeth_r
+    while y <= h - teeth_r:
+        for x in (teeth_r, w - teeth_r):
+            d.ellipse((x - teeth_r, y - teeth_r, x + teeth_r, y + teeth_r),
+                      fill=255)
+        y += pitch
+    out = img.convert("RGBA")
+    out.putalpha(mask)
+    dd = ImageDraw.Draw(out)
+    dd.rectangle((teeth_r + 5, teeth_r + 5, w - teeth_r - 5,
+                  h - teeth_r - 5), outline=(74, 72, 67, 255), width=1)
+    return out
+
+
+class PostageStamp(tk.Frame):
+    """One of your photos cropped into a real postage stamp: perforated
+    teeth, printed frame line, museum caption beneath. Fixed size."""
+
+    def __init__(self, master, photo, width=130, caption=None, bg=PAPER,
+                 **kw):
+        super().__init__(master, bg=bg, bd=0, highlightthickness=0, **kw)
+        self._label = tk.Label(self, bg=bg, bd=0, highlightthickness=0)
+        self._label.pack()
+        self._cap = tk.Label(self, bg=bg, fg=INK_SOFT, font=hand(13))
+        self._cap.pack(pady=(4, 0))
+        if caption is not None:
+            self._cap.configure(text=caption)
+        self._img = None
+        if photo and _PIL:
+            try:
+                img = Image.open(photo).convert("RGB")
+                h = int(width * 1.25)
+                img = perforate(cover_fit(img, width, h, 0.4))
+                self._img = ImageTk.PhotoImage(img)
+                self._label.configure(image=self._img)
+            except Exception:
+                self._label.configure(text="(photo missing)", fg=PENCIL)
+
+
 class Medallion(tk.Label):
     """A round tangerine portrait for panel headers."""
 

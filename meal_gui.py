@@ -320,15 +320,6 @@ class MealApp(tk.Tk):
                                      font=th.mono(10))
         self.footer_right.pack(side="right")
 
-        # margin + void doodles, reshuffled every launch inside safe
-        # zones: the spine gutter and the void's upper half never hold text
-        _kinds = ["tangerine", "sprig", "wheat", "star", "leaf", "chili"]
-        for _lo, _hi in ((0.24, 0.34), (0.50, 0.60), (0.74, 0.84)):
-            th.Doodle(self.paper, doodle=random.choice(_kinds),
-                      size=random.randint(30, 42)).place(
-                          x=46, rely=random.uniform(_lo, _hi),
-                          anchor="center")
-
         self._show("TODAY")
         if len(sys.argv) > 1 and sys.argv[1].lower().startswith("log"):
             self._show("LOG / EDIT")
@@ -640,9 +631,9 @@ class MealApp(tk.Tk):
         self._scatter_void()
 
     def _scatter_void(self):
-        """Two extra doodles floating in the measured free band above the
-        bottom prints row; skipped entirely when the void runs short, so
-        nothing ever overlaps. Runs once per launch."""
+        """Doodles spread across the void's real empty middle, above the
+        bottom prints row; fewer when the void runs short, none that can
+        touch content. Runs once per launch."""
         if getattr(self, "_void_scattered", False):
             return
         self._void_scattered = True
@@ -651,14 +642,24 @@ class MealApp(tk.Tk):
             h = self.void.winfo_height()
         except Exception:
             return
-        if h < 470:
+        top = 16
+        bottom = h - 320
+        if bottom - top < 110:
             return
         _kinds = ["tangerine", "sprig", "wheat", "star", "leaf", "chili"]
-        for _x0, _x1 in ((0.52, 0.64), (0.70, 0.82)):
+        if bottom - top >= 260:
+            spots = [(0.16, 0.30), (0.44, 0.52), (0.70, 0.80)]
+        elif bottom - top >= 170:
+            spots = [(0.20, 0.32), (0.60, 0.72)]
+        else:
+            spots = [(0.40, 0.55)]
+        for _x0, _x1 in spots:
             th.Doodle(self.void, doodle=random.choice(_kinds),
-                      size=random.randint(52, 64)).place(
+                      size=random.randint(56, 72)).place(
                           relx=random.uniform(_x0, _x1),
-                          rely=random.uniform(0.08, 0.30), anchor="center")
+                          rely=random.uniform(top / max(1, h),
+                                          bottom / max(1, h)),
+                          anchor="center")
 
     def refresh_log(self):
         self.log_cards.set_day(self.log_date)

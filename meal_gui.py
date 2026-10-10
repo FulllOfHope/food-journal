@@ -1092,8 +1092,10 @@ class MealApp(tk.Tk):
         th.hline(body, pady=(20, 14))
         bh = tk.Frame(body, bg=th.PAPER)
         bh.pack(fill="x", pady=(0, 6))
-        tk.Label(bh, text="WHICH MEALS GET SKIPPED", bg=th.PAPER,
-                 fg=th.PENCIL, font=th.mono(10)).pack(side="left")
+        self.ins_break_title = tk.Label(
+            bh, text="WHICH MEALS GET SKIPPED", bg=th.PAPER, fg=th.PENCIL,
+            font=th.mono(10))
+        self.ins_break_title.pack(side="left")
         self.ins_break_head = tk.Label(bh, bg=th.PAPER, fg=th.PENCIL,
                                        font=th.mono(10))
         self.ins_break_head.pack(side="right")
@@ -1503,7 +1505,7 @@ class MealApp(tk.Tk):
         self.ins_folio.configure(
             text=f"p. {day_no:02d}")
         self.ins_allow_head.configure(
-            text=f"MISS ALLOWANCE \u2014 {a['allowed']:g} ALLOWED")
+            text=f"MISS ALLOWANCE [{a['allowed']:g} ALLOWED]")
         self.ins_allow_left.configure(
             text=(f"{a['remaining']:g} remaining" if not over
                   else f"Over by {a['over']:g}"),
@@ -1554,8 +1556,11 @@ class MealApp(tk.Tk):
                                 missing=missing, split_at=2)
         st, days = mc.per_meal_stats(cs, now)
         self.ins_break.set_stats(st, days)
+        self.ins_break_title.configure(
+            text=(f"WHICH MEALS GET SKIPPED [{days} DAYS]" if days
+                  else "WHICH MEALS GET SKIPPED"))
         self.ins_break_head.configure(
-            text=(f"day 1-{days} of this cycle" if days
+            text=(f"days 1-{days} of this cycle" if days
                   else "no days logged yet"))
         self.ins_chart_note.configure(
             text=(f"{rng_start.strftime('%d %b')}\u2013"

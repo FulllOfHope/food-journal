@@ -1051,6 +1051,9 @@ class WeekStrip(tk.Canvas):
         self.create_line(0, ry + 3, w, ry + 3, fill=RULE, width=1)
         self.create_text(0, self.RIBBON_TXT, text="CYCLE", anchor="w",
                          fill=PENCIL, font=mono(9))
+        self.create_text(w / 2, self.RIBBON_TXT,
+                         text="click a day to edit", anchor="center",
+                         fill=RULE_DK, font=mono(9))
         self.create_text(w, self.RIBBON_TXT, text=f"{done} of {total} days",
                          anchor="e", fill=PENCIL, font=mono(9))
 

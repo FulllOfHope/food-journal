@@ -937,8 +937,7 @@ class MealApp(tk.Tk):
         win.transient(self)
         win.resizable(False, False)
         tk.Label(win, text="GO TO DATE", bg=th.PAPER, fg=th.INK,
-                 font=th.display(15), padx=22, pady=(18, 2)).pack(
-                     anchor="w")
+                 font=th.display(15), padx=22, pady=18).pack(anchor="w")
         tk.Label(win, text="day  ·  day/month  ·  yyyy-mm-dd",
                  bg=th.PAPER, fg=th.PENCIL, font=th.mono(9),
                  padx=22).pack(anchor="w")
@@ -1000,7 +999,7 @@ class MealApp(tk.Tk):
         win.transient(self)
         win.resizable(False, False)
         tk.Label(win, text="KEYS", bg=th.PAPER, fg=th.INK,
-                 font=th.display(18), padx=26, pady=(20, 10)).pack(anchor="w")
+                 font=th.display(18), padx=26, pady=20).pack(anchor="w")
         body = tk.Frame(win, bg=th.PAPER, padx=26)
         body.pack(fill="both", expand=True)
         for i, (key, what) in enumerate(self.HELP):
@@ -1189,26 +1188,45 @@ class MealApp(tk.Tk):
         box = self.void
         kept = getattr(self, "_doodles", {})
         done = getattr(self, "_doodled", set())
-        if done and self._doodles_clear(box, kept.get(view, [])):
+        mine = kept.get(view, [])
+        if done and mine and self._doodles_clear(box, mine):
             return
 
-        want, smin, smax, gap = 8, 44, 78, 20
+        want, gap = 8, 20
+        # size the marks to the paper actually left over, so a short
+        # window still gets doodles instead of an empty band
+        try:
+            vh = self.void.winfo_height()
+        except Exception:
+            vh = 120
+        smin = max(26, min(44, vh // 3))
+        smax = max(smin + 8, min(78, vh // 2))
 
-        fresh = []
+        orig = kept.get(view, [])
+        made, fresh = 0, []
         for _attempt in range(4):
-            for w in kept.get(view, []):
+            made, fresh = self._scatter_doodles(box, count=want, smin=smin,
+                                                smax=smax, gap=gap)
+            if made == 0 or self._doodles_clear(box, fresh):
+                break
+            for w in fresh:
                 try:
                     w.destroy()
                 except Exception:
                     pass
-            kept[view] = []
-            made, fresh = self._scatter_doodles(box, count=want, smin=smin,
-                                                smax=smax, gap=gap)
+            fresh = []
+        if made == 0:
+            kept[view] = orig        # a cramped retry must not wipe the page
+        else:
+            for w in orig:
+                try:
+                    w.destroy()
+                except Exception:
+                    pass
             kept[view] = fresh
-            if made == 0 or self._doodles_clear(box, fresh):
-                break
         self._doodles = kept
-        self._doodled = done | {view}
+        self._doodled = ((done | {view}) if kept.get(view)
+                         else (set(done) - {view}))
 
     def refresh_log(self):
         self.log_cards.set_day(self.log_date)

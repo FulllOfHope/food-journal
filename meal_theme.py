@@ -994,6 +994,7 @@ class Doodle(tk.Canvas):
                  **kw):
         super().__init__(master, width=size, height=size, bg=bg,
                          highlightthickness=0, bd=0, **kw)
+        self._kind = doodle
         cx, cy = size / 2, size / 2 + 2
         {"tangerine": self._tangerine,
          "sprig": self._sprig,

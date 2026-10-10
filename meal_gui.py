@@ -302,7 +302,7 @@ class MealApp(tk.Tk):
         _sky = th.art("insights.jpg", "log.jpg", "bg.jpg")
         self.banners = {
             name: th.PhotoBanner(self.paper, height=168, photo=_sky,
-                                 anchor=0.45)
+                                 anchor=0.80)
             for name in ("TODAY", "LOG / EDIT", "INSIGHTS")
         }
 

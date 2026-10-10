@@ -416,65 +416,12 @@ def cover_fit(img, w, h, anchor=0.5):
     return img.crop((x, y, x + w, y + h))
 
 
-def contain_fit(img, w, h):
-    """Scale img to sit entirely inside (w, h). Nothing is cropped."""
-    sw, sh = img.size
-    scale = min(w / max(1, sw), h / max(1, sh))
-    return img.resize((max(1, int(sw * scale)), max(1, int(sh * scale))),
-                      Image.LANCZOS)
+def stretch_fit(img, w, h):
+    """Scale img to exactly (w, h), keeping every pixel of it visible.
 
-
-def ambient_fill(img, w, h, anchor=0.5, blur=0.05, fade=0.5):
-    """A blurred, paper-tinted wash of the artwork used as backdrop, so a
-    complete uncropped print can sit on top without leaving dead space."""
-    base = cover_fit(img, w, h, anchor)
-    base = base.filter(ImageFilter.GaussianBlur(
-        radius=max(3, int(max(w, h) * blur))))
-    return Image.blend(base, Image.new("RGB", base.size, PAPER_RGB), fade)
-
-
-def art_hash(path):
-    """Content hash so identical artwork is never pasted twice."""
-    try:
-        with open(path, "rb") as fh:
-            return hashlib.sha1(fh.read()).hexdigest()
-    except Exception:
-        return path
-
-
-def print_strip(paths, w, h, gap=12, margin=6):
-    """Lay artworks out edge to edge as complete prints on paper.
-
-    Every image is scaled to fit whole, so the band shows all of the
-    artwork instead of a cropped sliver of it."""
-    prints = []
-    for p in paths:
-        try:
-            img = Image.open(p).convert("RGB")
-        except Exception:
-            continue
-        prints.append(contain_fit(img, 100000, max(1, h - 2 * margin)))
-    if not prints:
-        return Image.new("RGB", (w, h), PAPER_RGB)
-    if len(prints) == 1:
-        band = ambient_fill(Image.open(paths[0]).convert("RGB"), w, h)
-        band.paste(prints[0], ((w - prints[0].width) // 2,
-                               (h - prints[0].height) // 2))
-        return band
-    room = w - gap * (len(prints) - 1)
-    total = sum(im.width for im in prints)
-    scale = min(1.0, room / max(1, total))
-    if scale < 1.0:
-        prints = [im.resize((max(1, int(im.width * scale)),
-                             max(1, int(im.height * scale))), Image.LANCZOS)
-                  for im in prints]
-    total = sum(im.width for im in prints) + gap * (len(prints) - 1)
-    band = Image.new("RGB", (w, h), PAPER_RGB)
-    x = max(0, (w - total) // 2)
-    for im in prints:
-        band.paste(im, (x, (h - im.height) // 2))
-        x += im.width + gap
-    return band
+    Aspect is deliberately ignored so one photo can run edge to edge
+    across the page without being cropped."""
+    return img.resize((max(1, int(w)), max(1, int(h))), Image.LANCZOS)
 
 
 def feather_edges(img, top=30, bottom=56):
@@ -536,8 +483,7 @@ class PhotoBanner(tk.Canvas):
         super().__init__(master, height=height, bg=bg, highlightthickness=0,
                          bd=0, **kw)
         pool = list(photos) if photos else ([photo] if photo else [])
-        self._photos = [p for p in pool if p]
-        self._photo = self._photos[0] if self._photos else None
+        self._photo = pool[0] if pool else None
         self._anchor = anchor
         self._seed = seed
         self._img = None
@@ -562,14 +508,15 @@ class PhotoBanner(tk.Canvas):
             return
         if w < 60 or h < 30:
             return
-        photo = self._photos and _PIL
+        photo = self._photo and _PIL
         if photo:
-            key = (_ART_VERSION, "strip", tuple(self._photos),
-                   tuple(_file_stamp(p) for p in self._photos), w, h)
+            key = (_ART_VERSION, "stretch", self._photo,
+                   _file_stamp(self._photo), w, h)
             if key != self._key:
                 try:
                     def build(w=w, h=h):
-                        return feather_edges(print_strip(self._photos, w, h))
+                        img = Image.open(self._photo).convert("RGB")
+                        return stretch_fit(img, w, h)
                     self._img = ImageTk.PhotoImage(cached_image(key, build))
                     self._key = key
                 except Exception:
@@ -960,43 +907,6 @@ class Seal(tk.Canvas):
 
 
 # ------------------------------------------------------- photo prints
-class Polaroid(tk.Frame):
-    """A pasted photo print for empty stretches: your art with a cream
-    border and a handwritten caption carrying real day facts. Fixed
-    size, so it never flickers or shifts the layout."""
-
-    def __init__(self, master, photo=None, width=280, bg=PAPER,
-                 caption=None, **kw):
-        super().__init__(master, bg="#fbf7ec", bd=0, highlightthickness=1,
-                         highlightbackground=RULE_DK, **kw)
-        self._label = tk.Label(self, bg="#fbf7ec", bd=0, highlightthickness=0)
-        self._label.pack(padx=12, pady=(12, 6))
-        self._cap = tk.Label(self, bg="#fbf7ec", fg=INK_SOFT,
-                             font=hand(14))
-        self._cap.pack(pady=(0, 10))
-        if caption is not None:
-            self._cap.configure(text=caption)
-        if photo and _PIL:
-            try:
-                img = Image.open(photo).convert("RGB")
-                side = width - 24
-                sw, sh = img.size
-                scale = min(side / max(1, sw), side / max(1, sh))
-                nw, nh = max(1, int(sw * scale)), max(1, int(sh * scale))
-                img = img.resize((nw, nh), Image.LANCZOS)
-                mat = Image.new("RGB", (side, side), (251, 247, 236))
-                mat.paste(img, ((side - nw) // 2, (side - nh) // 2))
-                self._img = ImageTk.PhotoImage(mat)
-                self._label.configure(image=self._img)
-            except Exception:
-                self._label.configure(text="(photo missing)", fg=PENCIL)
-        else:
-            self._label.configure(text="(photo missing)", fg=PENCIL)
-
-    def set_caption(self, text):
-        self._cap.configure(text=text)
-
-
 class Medallion(tk.Label):
     """A round tangerine portrait for panel headers."""
 

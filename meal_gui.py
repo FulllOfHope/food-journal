@@ -60,6 +60,7 @@ class MealCard(tk.Frame):
                          highlightbackground=th.RULE)
         self.app = app
         self.meal = meal
+        self._blocks_doodles = True
         self.date = mc.today()
         self._enabled = True
 
@@ -201,16 +202,6 @@ class CardRow(tk.Frame):
 
 # ----------------------------------------------------------------- app
 DOODLE_KINDS = ["tangerine", "sprig", "wheat", "star", "leaf", "chili"]
-PRINT_POOL = ["extra-grove-fl.jpg", "extra-grove-ormond.jpg",
-              "today.jpg", "log.jpg", "insights.jpg"]
-POLAROID_RESERVE = 320  # the pasted print owns this much of the void
-
-
-def w0(app):
-    try:
-        return app.void.winfo_width()
-    except Exception:
-        return 0
 
 
 def _overlaps(a, b, pad=0):
@@ -306,13 +297,10 @@ class MealApp(tk.Tk):
         th.double_rule(self.paper, pady=4)
 
         # -- full-bleed photographic mastheads, one per view
+        _sky = th.art("insights.jpg", "log.jpg", "bg.jpg")
         self.banners = {
-            "TODAY": th.PhotoBanner(self.paper, height=168,
-                                    photos=self._print_set("today.jpg")),
-            "LOG / EDIT": th.PhotoBanner(self.paper, height=168,
-                                         photos=self._print_set("log.jpg")),
-            "INSIGHTS": th.PhotoBanner(self.paper, height=168,
-                                       photos=self._print_set("insights.jpg")),
+            name: th.PhotoBanner(self.paper, height=168, photo=_sky)
+            for name in ("TODAY", "LOG / EDIT", "INSIGHTS")
         }
 
         # -- views
@@ -343,74 +331,170 @@ class MealApp(tk.Tk):
         elif len(sys.argv) > 1 and sys.argv[1].lower().startswith("ins"):
             self._show("INSIGHTS")
 
-    def _print_set(self, primary):
-        """This view's artwork first, then the rest, de-duplicated by
-        content so the same picture never appears twice in one band."""
-        seen, out = set(), []
-        rest = list(PRINT_POOL)
-        random.shuffle(rest)
-        for name in [primary] + rest:
-            p = th.art(name)
-            if not p:
+    # ---------------------------------------------------- doodle scatter
+    def _content_rects(self, widget, out, origin=None):
+        """Rects of real content under `widget`, ignoring our own doodles.
+
+        Every rect is measured against the top-level page origin, not the
+        immediate parent, so nested cards land where they really are.
+        Doodles are excluded so they never treat each other as content,
+        which would make re-scattering impossible."""
+        if origin is None:
+            origin = (widget.winfo_rootx(), widget.winfo_rooty())
+        for child in widget.winfo_children():
+            try:
+                if not child.winfo_ismapped():
+                    continue
+                x = child.winfo_rootx() - origin[0]
+                y = child.winfo_rooty() - origin[1]
+                w, h = child.winfo_width(), child.winfo_height()
+            except Exception:
                 continue
-            h = th.art_hash(p)
-            if h in seen:
+            if w <= 1 or h <= 1:
                 continue
-            seen.add(h)
-            out.append(p)
+            if isinstance(child, th.Doodle) or \
+                    getattr(child, "_doodle_zone", False):
+                continue
+            if isinstance(child, (th.ScrollFrame, th.PaperCanvas)):
+                out.append((x, y, x + w, y + h))
+                continue
+            kids = child.winfo_children()
+            container = (kids and isinstance(child, tk.Frame)
+                         and not isinstance(child, (tk.Canvas, tk.Label)))
+            if not container or getattr(child, "_blocks_doodles", False):
+                out.append((x, y, x + w, y + h))
+            if kids:
+                self._content_rects(child, out, origin)
         return out
 
-    # ---------------------------------------------------- doodle scatter
-    def _scatter_doodles(self, container, avoid=(), count=4, smin=52,
-                         smax=82, pad=10, min_h=60, xmax=None, existing=None):
-        """Drop random doodles into whatever room is genuinely free.
+    @staticmethod
+    def _largest_free_rect(blocked, w, h, cell=12, pad=8):
+        """Biggest all-empty rectangle on the page, as (x, y, w, h).
 
-        Returns False when the layout is not measured yet, so the caller
-        retries on the next <Configure> instead of scattering blind."""
+        Content is rasterised into a coarse grid and a histogram scan
+        finds the largest run of untouched cells, so a doodle can only
+        ever land on paper nothing else is using."""
+        cols, rows = max(1, w // cell), max(1, h // cell)
+        padded = [(x0 - pad, y0 - pad, x1 + pad, y1 + pad)
+                  for (x0, y0, x1, y1) in blocked]
+        occ = []
+        for r in range(rows):
+            cy = r * cell
+            row = []
+            for c in range(cols):
+                cx = c * cell
+                row.append(any(not (cx + cell <= b[0] or b[2] <= cx
+                                    or cy + cell <= b[1] or b[3] <= cy)
+                               for b in padded))
+            occ.append(row)
+        best = (0, 0, 0, 0, 0)
+        heights = [0] * cols
+        for r in range(rows):
+            for c in range(cols):
+                heights[c] = 0 if occ[r][c] else heights[c] + 1
+            stack = []
+            for c in range(cols + 1):
+                cur = heights[c] if c < cols else 0
+                start = c
+                while stack and stack[-1][1] > cur:
+                    idx, hgt = stack.pop()
+                    area = hgt * (c - idx)
+                    if area > best[0]:
+                        best = (area, r - hgt + 1, idx, hgt, c - idx)
+                    start = idx
+                stack.append((start, cur))
+        area, r0, c0, rh, rw = best
+        return None if area <= 0 else (c0 * cell, r0 * cell,
+                                       rw * cell, rh * cell)
+
+    def _scatter_doodles(self, container, count=6, smin=44, smax=76,
+                         gap=20, min_h=40, reserve=()):
+        """Place doodles on an even grid inside the page's emptiest patch.
+
+        Returns (placed, widgets). The grid gives even spacing for free and
+        the free-rectangle search keeps every doodle off real content."""
         try:
             container.update_idletasks()
             w, h = container.winfo_width(), container.winfo_height()
         except Exception:
-            return False
-        if w < 80 or h < min_h:
-            return False
-        blocked = []
-        for wid in avoid:
-            if wid is None:
-                continue
+            return 0, []
+        if w < 140 or h < min_h:
+            return 0, []
+
+        blocked = self._content_rects(container, [])
+        ox, oy = container.winfo_rootx(), container.winfo_rooty()
+        for wid in reserve:
             try:
-                if not wid.winfo_ismapped():
-                    return False
-                x, y = wid.winfo_x(), wid.winfo_y()
-                ww, hh = wid.winfo_width(), wid.winfo_height()
+                if wid is None or not wid.winfo_ismapped():
+                    continue
+                rx = wid.winfo_rootx() - ox
+                ry = wid.winfo_rooty() - oy
+                blocked.append((rx, ry, rx + wid.winfo_width(),
+                                ry + wid.winfo_height()))
             except Exception:
-                return False
-            if ww <= 1 or hh <= 1:
-                return False
-            blocked.append((x, y, x + ww, y + hh))
-        span = w if xmax is None else min(w, xmax)
-        placed = made = 0
-        boxes = []
-        for _ in range(count * 40):
+                continue
+        space = self._largest_free_rect(blocked, w, h)
+        if space is None:
+            return 0, []
+        fx, fy, fw, fh = space
+        if fw < smin or fh < smin:
+            return 0, []
+
+        max_cols = max(1, int(fw // (smin + gap)))
+        max_rows = max(1, int(fh // (smin + gap)))
+        grid = None
+        for rows in range(1, max_rows + 1):
+            cols = -(-count // rows)
+            if cols > max_cols:
+                continue
+            cell_w, cell_h = fw / cols, fh / rows
+            cap = min(smax, int(min(cell_w, cell_h)) - gap)
+            if cap < smin:
+                continue
+            fill = count / float(cols * rows)
+            if grid is None or fill > grid[0]:
+                grid = (fill, cols, rows, cap)
+        if grid is None:
+            return 0, []
+        _, cols, rows, cap = grid
+        cell_w, cell_h = fw / cols, fh / rows
+
+        cells = [(c, r) for r in range(rows) for c in range(cols)]
+        random.shuffle(cells)
+        made, widgets = 0, []
+        for c, r in cells:
             if made >= count:
                 break
-            size = random.randint(smin, smax)
-            x = random.randint(0, max(0, span - size))
-            y = (random.randint(0, h - size) if h >= size
-                 else (h - size) // 2)
-            r = (x, y, x + size, y + size)
-            if any(_overlaps(r, b, pad) for b in blocked):
-                continue
-            if any(_overlaps(r, b, pad) for b in boxes):
-                continue
-            boxes.append(r)
-            widget = th.Doodle(container, doodle=random.choice(DOODLE_KINDS),
+            size = random.randint(smin, cap)
+            jx = random.uniform(-0.22, 0.22) * (cell_w - size)
+            jy = random.uniform(-0.22, 0.22) * (cell_h - size)
+            x = fx + c * cell_w + (cell_w - size) / 2 + jx
+            y = fy + r * cell_h + (cell_h - size) / 2 + jy
+            widget = th.Doodle(container,
+                               doodle=random.choice(DOODLE_KINDS),
                                size=size)
-            widget.place(x=x, y=y)
-            if existing is not None:
-                existing.append(widget)
+            widget.place(x=int(x), y=int(y))
+            widgets.append(widget)
             made += 1
-        return made
+        return made, widgets
+
+    def _doodles_clear(self, page, widgets):
+        """True when nothing we drew is sitting on top of real content."""
+        if not widgets:
+            return True
+        content = self._content_rects(page, [])
+        for d in widgets:
+            try:
+                if not d.winfo_ismapped():
+                    continue
+                x, y = d.winfo_rootx() - page.winfo_rootx(), \
+                    d.winfo_rooty() - page.winfo_rooty()
+                box = (x, y, x + d.winfo_width(), y + d.winfo_height())
+            except Exception:
+                return False
+            if any(_overlaps(box, c, 6) for c in content):
+                return False
+        return True
 
     def _tab_hover(self, name):
         if name != self.active_view:
@@ -438,6 +522,7 @@ class MealApp(tk.Tk):
             underline.configure(bg=th.STAMP if active else th.PAPER)
         self.detail_mode = (name == "LOG / EDIT")
         self.refresh_active()
+        self._doodled = set()
         self._schedule_scatter()
 
     def _schedule_scatter(self, _event=None):
@@ -473,6 +558,7 @@ class MealApp(tk.Tk):
         setattr(self, prefix + "_date", date)
         setattr(self, prefix + "_note", note)
         setattr(self, prefix + "_folio", folio)
+        setattr(self, prefix + "_mast", mast)
         return mast
 
     # ------------------------------------------------------------ TODAY
@@ -492,14 +578,10 @@ class MealApp(tk.Tk):
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
-        # scrapbook void: random doodles fill the free paper, polaroid right
+        # scrapbook void: pure empty paper for the doodles
         self.void = tk.Frame(parent, bg=th.PAPER)
+        self.void._doodle_zone = True
         self.void.pack(fill="both", expand=True, pady=(20, 0))
-        _pol = th.art("log.jpg", "bg.jpg")
-        self.polaroid = th.Polaroid(self.void, photo=_pol) if _pol else None
-        if self.polaroid is not None:
-            self.polaroid.place(relx=1.0, rely=1.0, anchor="se", x=-16,
-                                y=-8)
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -718,57 +800,50 @@ class MealApp(tk.Tk):
         self.today_sum.configure(
             text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
                  f"{rupees(today_bill)}")
-        if getattr(self, "polaroid", None) is not None:
-            _dno = (now - mc.cycle_start(now)).days + 1
-            self.polaroid.set_caption(
-                f"day {_dno:02d} \u2014 {today_e['meals_counted']:g} meals")
 
     def _scatter_view(self):
-        """Give the live view its doodles into free paper only.
+        """Keep the live view's doodles in free paper, evenly spaced.
 
-        The page is often still short when the first <Configure> lands, so
-        a partial scatter is thrown away and retried until it fits or the
-        layout stops moving."""
-        done = getattr(self, "_doodled", set())
+        Runs on <Configure> and after a refresh. Whatever is already drawn
+        is re-checked against live content: if the page re-flowed and
+        something now sits under a doodle, that scatter is rebuilt until
+        it comes back clean, or until the page has no room left."""
         view = self.active_view
-        if view in done:
+        page = getattr(self, "views", {}).get(view)
+        if page is None:
             return
+        box = self.void if (view == "TODAY"
+                            and getattr(self, "void", None)) else page
         kept = getattr(self, "_doodles", {})
-        tries = getattr(self, "_tries", {})
-        for w in kept.get(view, []):
-            try:
-                w.destroy()
-            except Exception:
-                pass
-        kept[view] = []
+        done = getattr(self, "_doodled", set())
+        if view in done and self._doodles_clear(box, kept.get(view, [])):
+            return
 
+        mast = getattr(self, {"TODAY": "today", "LOG / EDIT": "logm",
+                              "INSIGHTS": "ins"}[view] + "_mast", None)
         if view == "TODAY":
-            if getattr(self, "void", None) is None:
-                return
-            want, opts = 6, dict(smin=54, smax=86, pad=10)
-            keep = 0 if self.polaroid is None else POLAROID_RESERVE
-            opts["xmax"] = max(200, w0(self) - keep)
-            box, avoid = self.void, [self.polaroid]
-        elif view == "LOG / EDIT":
-            if getattr(self, "log_sealrow", None) is None:
-                return
-            want, opts = 3, dict(smin=30, smax=44, pad=8, min_h=18)
-            box, avoid = self.log_sealrow, [self.log_seal]
+            want, smin, smax, gap = 6, 44, 76, 20
+            reserve = ()
         else:
-            if getattr(self, "ins_allowrow", None) is None:
-                return
-            want = 2
-            opts = dict(smin=30, smax=46, pad=8, min_h=18)
-            box = self.ins_allowrow
-            avoid = [self.ins_allow_left, self.ins_allow_right]
+            want, smin, smax, gap = 3, 26, 40, 14
+            reserve = (mast,)
 
-        made = self._scatter_doodles(box, avoid=avoid, count=want,
-                                     existing=kept[view], **opts)
+        fresh = []
+        for _attempt in range(4):
+            for w in kept.get(view, []):
+                try:
+                    w.destroy()
+                except Exception:
+                    pass
+            kept[view] = []
+            made, fresh = self._scatter_doodles(box, count=want, smin=smin,
+                                                smax=smax, gap=gap,
+                                                reserve=reserve)
+            kept[view] = fresh
+            if made == 0 or self._doodles_clear(box, fresh):
+                break
         self._doodles = kept
-        tries[view] = tries.get(view, 0) + 1
-        self._tries = tries
-        if made >= want or tries[view] >= 15:
-            self._doodled = done | {view}
+        self._doodled = done | {view}
 
     def refresh_log(self):
         self.log_cards.set_day(self.log_date)

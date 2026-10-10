@@ -732,57 +732,123 @@ class Stamp(tk.Canvas):
 
 
 # ------------------------------------------------------- doodle stamp
+def tally(canvas, x, y, value, h=15, gap=5, colour=INK_SOFT, slant=6,
+          max_groups=9):
+    """Pen tally marks: four uprights and a diagonal for each five.
+
+    Returns the x just past the last stroke, so callers can lay marks out
+    in a row the way they would rule them on paper."""
+    done = 0
+    x0 = x
+    while value >= 5 and done < max_groups:
+        for i in range(4):
+            canvas.create_line(x0 + i * gap, y - h, x0 + i * gap, y,
+                               fill=colour, width=1.8, capstyle="round")
+        canvas.create_line(x0 - slant * 0.6, y + 1, x0 + 3 * gap + slant * 0.6,
+                           y - h - 1, fill=colour, width=1.8,
+                           capstyle="round")
+        x0 += 4 * gap + slant + gap
+        value -= 5
+        done += 1
+    for i in range(int(value)):
+        canvas.create_line(x0 + i * gap, y - h, x0 + i * gap, y,
+                           fill=colour, width=1.8, capstyle="round")
+        x0 += gap
+    return x0
+
+
+class PenTally(tk.Canvas):
+    """A row of hand-ruled tally marks, like counting on a page."""
+
+    def __init__(self, master, height=22, bg=PAPER, colour=INK_SOFT, **kw):
+        super().__init__(master, height=height, bg=bg, highlightthickness=0,
+                         bd=0, **kw)
+        self._colour = colour
+        self._value = 0
+        self._over = False
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def set_value(self, value, over=False):
+        self._value = max(0, int(round(value)))
+        self._over = over
+        self.redraw()
+
+    def redraw(self):
+        self.delete("all")
+        if self._value <= 0:
+            return
+        y = self.winfo_height() - 6
+        end = tally(self, 1, y, self._value, h=min(14, y - 3),
+                    colour=RED if self._over else self._colour)
+        if self._over:
+            self.create_text(end + 6, y - 7, text="over", anchor="w",
+                             fill=RED, font=mono(9))
+
+
 class MealBreakdown(tk.Canvas):
-    """Which meals actually get skipped: eaten vs expected for each one.
+    """Which meals actually get skipped, ruled the way you would on paper:
+    a row of ticked boxes, one per day the meal was offered.
 
-    Saturday dinner is worth nothing, so it is listed as closed instead of
-    dragging the averages down with a fake miss."""
+    Saturday dinner is worth nothing, so it is reported as closed rather
+    than dragging the count down with a fake miss."""
 
-    ROW_H = 34
+    ROW_H = 40
 
     def __init__(self, master, bg=PAPER, height=None, **kw):
         super().__init__(master, height=height or self.ROW_H * 3 + 6, bg=bg,
                          highlightthickness=0, bd=0, **kw)
         self._stats = {}
-        self._days = 0
         self.bind("<Configure>", lambda e: self.redraw())
 
     def set_stats(self, stats, days):
         self._stats = stats or {}
-        self._days = days
         self.redraw()
 
     def redraw(self):
         self.delete("all")
         w = max(1, self.winfo_width())
-        if w < 80 or not self._stats:
+        if w < 120 or not self._stats:
             return
         labels = {"breakfast": "BREAKFAST", "lunch": "LUNCH",
                   "dinner": "DINNER"}
+        box, step = 13, 16
         for i, meal in enumerate(("breakfast", "lunch", "dinner")):
             d = self._stats.get(meal, {})
             y = i * self.ROW_H
-            expected = d.get("expected", 0.0)
-            eaten = d.get("eaten", 0.0)
-            self.create_text(0, y + 8, text=labels[meal], anchor="w",
-                             fill=INK_SOFT, font=mono(10))
-            bar_x, bar_w = 92, max(40, w - 92 - 116)
-            self.create_rectangle(bar_x, y + 2, bar_x + bar_w, y + 16,
-                                  outline=RULE, width=1)
-            if expected > 0:
-                frac = max(0.0, min(1.0, eaten / expected))
-                self.create_rectangle(bar_x + 1, y + 3,
-                                      bar_x + 1 + (bar_w - 2) * frac, y + 15,
-                                      fill=VEG, outline="")
-            missed = d.get("missed", 0.0)
-            if expected <= 0:
-                note = "closed Sat"
-                col = PENCIL_LT
-            else:
-                note = f"{missed:g} missed \u00b7 {d.get('skipped', 0)} days"
-                col = RED if missed > 0 else PENCIL_LT
-            self.create_text(w, y + 9, text=note, anchor="e", fill=col,
-                             font=mono(10))
+            offered = d.get("offered", 0)
+            skipped = d.get("skipped", 0)
+            self.create_text(0, y + 7, text=labels[meal], anchor="w",
+                             fill=INK, font=mono(10))
+            if offered <= 0:
+                self.create_text(w, y + 7, text="closed on Saturdays",
+                                 anchor="e", fill=PENCIL_LT, font=mono(9))
+                continue
+            kept = offered - skipped
+            x0 = 92
+            # one ruled box per day offered: ticked when it was eaten
+            for k in range(offered):
+                bx = x0 + k * step
+                if bx + box > w - 118:
+                    break
+                self.create_rectangle(bx, y, bx + box, y + box,
+                                      outline=RULE_DK, width=1)
+                if k < kept:
+                    self.create_line(bx + 3, y + box / 2, bx + box / 2,
+                                     y + box - 3, fill=VEG, width=1.8,
+                                     capstyle="round")
+                    self.create_line(bx + box / 2, y + box - 3,
+                                     bx + box - 3, y + 3, fill=VEG,
+                                     width=1.8, capstyle="round")
+                else:
+                    self.create_line(bx + 3, y + 3, bx + box - 3, y + box - 3,
+                                     fill=RED, width=1.6)
+                    self.create_line(bx + box - 3, y + 3, bx + 3, y + box - 3,
+                                     fill=RED, width=1.6)
+            note = f"{skipped} missed of {offered}" if skipped else \
+                   f"all {offered} kept"
+            self.create_text(w, y + 7, text=note, anchor="e",
+                             fill=RED if skipped else PENCIL,
+                             font=mono(9))
 
 
 class MonthGrid(tk.Canvas):
@@ -797,13 +863,18 @@ class MonthGrid(tk.Canvas):
         super().__init__(master, height=340, bg=bg, highlightthickness=0,
                          bd=0, **kw)
         self._cells = []
+        self._marks = {}
         self._today = None
         self._on_pick = on_pick
         self.bind("<Configure>", lambda e: self.redraw())
 
-    def set_month(self, months, today=None):
-        """`months` is [(date, eaten, expected), ...] for one month."""
+    def set_month(self, months, today=None, ticks=None):
+        """`months` is [(date, eaten, expected), ...] for one month.
+
+        `ticks` is [(date, {meal: eaten_or_closed}), ...] so each cell can
+        show its three marks instead of a filled bar."""
         self._cells = list(months)
+        self._marks = {d: m for d, m in (ticks or [])}
         self._today = today
         self.redraw()
 
@@ -836,20 +907,34 @@ class MonthGrid(tk.Canvas):
             y = body_top + r * ch
             today = (d == self._today)
             self.create_rectangle(x + 3, y + 2, x + cw - 3, y + ch - 4,
-                                  outline=RULE, width=1)
-            if expected > 0 and eaten > 0:
-                frac = max(0.0, min(1.0, eaten / expected))
-                self.create_rectangle(x + 3, y + ch - 4 - (ch - 8) * frac,
-                                      x + cw - 3, y + ch - 4,
-                                      fill=VEG if frac >= 1 else HONEY,
-                                      outline="")
+                                  outline=STAMP if today else RULE,
+                                  width=1.4 if today else 1)
             self.create_text(x + 9, y + 13, text=d.strftime("%d"),
                              anchor="w",
                              fill=INK if today else INK_SOFT,
                              font=mono(10))
-            if today:
-                self.create_oval(x + cw - 16, y + 5, x + cw - 6, y + 15,
-                                 fill=STAMP, outline="")
+            marks = self._marks.get(d)
+            if marks:
+                bx, bs = x + 9, 11
+                for j, meal in enumerate(("breakfast", "lunch", "dinner")):
+                    got = marks.get(meal)
+                    if got is None:
+                        continue
+                    mx = bx + j * bs
+                    my = y + ch - 18
+                    if got == "closed":
+                        self.create_line(mx, my + 4, mx + 6, my + 4,
+                                         fill=RULE_DK, width=1.6)
+                        continue
+                    self.create_rectangle(mx, my, mx + 6, my + 6,
+                                          outline=RULE_DK, width=1)
+                    if got:
+                        self.create_line(mx + 1, my + 3, mx + 3, my + 5,
+                                         fill=VEG, width=1.4,
+                                         capstyle="round")
+                        self.create_line(mx + 3, my + 5, mx + 5, my + 1,
+                                         fill=VEG, width=1.4,
+                                         capstyle="round")
             self.create_rectangle(x, y, x + cw, y + ch, fill="",
                                   outline="", tags=f"m{i}")
             self.tag_bind(f"m{i}", "<Button-1>", lambda e, k=i: self._pick(k))
@@ -863,13 +948,13 @@ class WeekStrip(tk.Canvas):
     """The last seven days as a row of little meal stamps, plus a ribbon
     showing how far through the billing cycle the month is."""
 
-    BOX = 26
-    BOX_Y = 12          # top of the stamp boxes
-    LETTER_Y = 50       # weekday initial
-    DATE_Y = 62         # day number
-    RIBBON_Y = 72       # progress rule
-    RIBBON_TXT = 84     # progress caption
-    TOTAL_H = 96
+    BOX = 24
+    BOX_Y = 10          # top of the stamp boxes
+    LETTER_Y = 44       # weekday initial
+    DATE_Y = 55         # day number
+    RIBBON_Y = 64       # progress rule
+    RIBBON_TXT = 74     # progress caption
+    TOTAL_H = 84
 
     def __init__(self, master, bg=PAPER, on_pick=None, height=None,
                  **kw):
@@ -953,17 +1038,21 @@ class WeekStrip(tk.Canvas):
             self.tag_bind(f"hit{i}", "<Leave>",
                           lambda e: self.configure(cursor=""))
 
-        ry = self.RIBBON_Y
-        self.create_line(0, ry, w, ry, fill=RULE, width=1)
+        # a ruled scale: one tick per day of the cycle, filled to today
         done, total = self._progress
-        frac = 0.0 if not total else max(0.0, min(1.0, done / float(total)))
-        if frac > 0:
-            self.create_line(0, ry, w * frac, ry, fill=STAMP, width=3)
-        self.create_text(0, self.RIBBON_TXT,
-                         text=f"CYCLE  {done} / {total} DAYS",
-                         anchor="w", fill=PENCIL, font=mono(9))
-        self.create_text(w, self.RIBBON_TXT,
-                         text=f"{frac * 100:.0f}% through",
+        done, total = int(done), max(1, int(total))
+        ry = self.RIBBON_Y + 4
+        step = w / float(total)
+        for i in range(total):
+            x = i * step
+            tall = (i % 7 == 0)
+            self.create_line(x, ry, x, ry - (9 if tall else 5),
+                             fill=STAMP if i < done else RULE_DK,
+                             width=1.6 if tall else 1.1)
+        self.create_line(0, ry + 3, w, ry + 3, fill=RULE, width=1)
+        self.create_text(0, self.RIBBON_TXT, text="CYCLE", anchor="w",
+                         fill=PENCIL, font=mono(9))
+        self.create_text(w, self.RIBBON_TXT, text=f"{done} of {total} days",
                          anchor="e", fill=PENCIL, font=mono(9))
 
 
@@ -1196,8 +1285,22 @@ class AllowanceBox(tk.Canvas):
         self._used = 0.0
         self._allowed = 25
         self.configure(height=self.COMPACT_H)
+        self._drawn_w = 0
         self.bind("<Enter>", lambda e: self.redraw())
         self.bind("<Leave>", lambda e: self.draw_compact())
+        # the compact row is drawn from the live width, so it has to be
+        # rebuilt once the widget actually has a size
+        self.bind("<Configure>", self._on_size)
+
+    def _on_size(self, _e=None):
+        w = self.winfo_width()
+        if abs(w - self._drawn_w) < 8:
+            return
+        self._drawn_w = w
+        if self._hovered():
+            self.redraw()
+        else:
+            self.draw_compact()
 
     def set_value(self, used, allowed=25):
         self._used = max(0.0, float(used))
@@ -1218,26 +1321,40 @@ class AllowanceBox(tk.Canvas):
             return False
 
     def draw_compact(self):
-        """A single slim bar instead of 25 boxes. Hover to open the grid."""
+        """A single row of ruled cells instead of 25 boxes.
+
+        The count already sits on the line above, so this stays quiet:
+        just the marks, and the pointer turns them into the full grid."""
         self.delete("all")
-        w = max(1, self.winfo_width())
+        w = self.winfo_width()
+        if w < 40:
+            return
+        self._drawn_w = w
         self.configure(height=self.COMPACT_H)
-        left = max(0.0, self._allowed - self._used)
-        frac = max(0.0, min(1.0, self._used / float(self._allowed)))
-        y = 16
-        self.create_rectangle(0, y, w, y + 9, fill=GRAPH_BG, outline=RULE,
-                              width=1)
-        if frac > 0:
-            self.create_rectangle(0, y, w * frac, y + 9, fill=RED,
-                                  outline="")
-        self.create_text(0, 8, anchor="w",
-                         text=f"{self._used:g} misses used", fill=INK_SOFT,
-                         font=mono(10))
-        note = f"{left:g} left"
-        if left <= 0:
-            note = f"over by {self._used - self._allowed:g}"
-        self.create_text(w, 8, anchor="e", text=note,
-                         fill=RED if left <= 0 else PENCIL, font=mono(10))
+        full = int(self._used)
+        half = 1 if self._used - full >= 0.5 else 0
+        shown = min(self._allowed, full + half)
+        box, gap = 11, 3
+        per = max(1, (w - 8) // (box + gap))
+        x = 4
+        for i in range(min(shown, per)):
+            over = i >= self._allowed
+            col = RED if over else INK
+            self.create_rectangle(x, 9, x + box, 9 + box, outline=RULE_DK,
+                                  width=1)
+            if i < full:
+                self.create_line(x + 2, 11, x + box - 2, 9 + box - 2,
+                                 fill=col, width=1.5)
+                self.create_line(x + 2, 9 + box - 2, x + box - 2, 11,
+                                 fill=col, width=1.5)
+            elif i == full and half:
+                self.create_line(x + 2, 9 + box - 2, x + box - 2, 11,
+                                 fill=col, width=1.5)
+            x += box + gap
+        if full + half > per:
+            self.create_text(x + 6, 9 + box / 2,
+                             text=f"+{full + half - per} more", anchor="w",
+                             fill=RED, font=mono(9))
 
     def redraw(self):
         self.delete("all")

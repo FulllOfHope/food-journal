@@ -20,7 +20,7 @@ import meal_common as mc
 import meal_theme as th
 
 APP_TITLE = "Mess Ledger"
-BAND_H = 196
+BAND_H = 140
 DOW3 = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 GUTTER = (84, 28)  # clear of the spine + margin rule, like a real page
 
@@ -78,8 +78,8 @@ class MealCard(tk.Frame):
                             font=th.mono(11))
         self.key.pack(side="right")
 
-        self.stamp = th.Stamp(self.body, height=54, bg=th.CARD)
-        self.stamp.pack(anchor="w", padx=16, pady=(20, 20))
+        self.stamp = th.Stamp(self.body, height=44, bg=th.CARD)
+        self.stamp.pack(anchor="w", padx=16, pady=(12, 12))
 
         self.rule = tk.Frame(self.body, bg=th.RULE, height=1, bd=0)
         self.rule.pack(fill="x", padx=16)
@@ -391,12 +391,15 @@ class MealApp(tk.Tk):
             sh = max(480, self.winfo_screenheight())
         except Exception:
             sw, sh = 1280, 800
-        w = max(780, min(1180, int(sw * 0.94)))
-        h = max(660, min(800, int(sh * 0.9)))
+        w = max(780, min(1240, int(sw * 0.94)))
+        # use the height the screen actually offers: the masthead, the
+        # cards and the week strip all need vertical room, and TODAY
+        # needs what is left over for its doodle band
+        h = max(700, min(960, int(sh * 0.92)))
         x = max(0, (sw - w) // 2)
         y = max(0, min(40, (sh - h) // 8))
         self.geometry(f"{w}x{h}+{x}+{y}")
-        self.minsize(min(780, w), min(660, h))
+        self.minsize(min(780, w), min(700, h))
 
     def _build(self):
         # -- header: ledger brand left, mono tabs right, double rule
@@ -675,14 +678,14 @@ class MealApp(tk.Tk):
         """Paper title block under the banner: eyebrow, Playfair date,
         hand note left; folio right."""
         mast = tk.Frame(parent, bg=th.PAPER)
-        mast.pack(fill="x", pady=(4, 0))
+        mast.pack(fill="x", pady=(2, 0))
         left = tk.Frame(mast, bg=th.PAPER)
         left.pack(side="left")
         eb = th.eyebrow(left, "")
         eb.pack(anchor="w")
-        date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(30),
+        date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(25),
                         anchor="w")
-        date.pack(anchor="w", pady=(14, 10))
+        date.pack(anchor="w", pady=(8, 5))
         note = tk.Label(left, bg=th.PAPER, fg=th.INK_SOFT, font=th.hand(16),
                         anchor="w")
         note.pack(anchor="w", pady=(0, 0))
@@ -702,7 +705,7 @@ class MealApp(tk.Tk):
         self.today_cards.pack(fill="x")
 
         row = tk.Frame(parent, bg=th.PAPER)
-        row.pack(fill="x", pady=(20, 0))
+        row.pack(fill="x", pady=(12, 0))
         self.today_sum = tk.Label(row, bg=th.PAPER, fg=th.INK,
                                   font=th.mono(11))
         self.today_sum.pack(side="left")
@@ -714,12 +717,12 @@ class MealApp(tk.Tk):
 
         self.week = th.WeekStrip(parent, bg=th.PAPER,
                                  on_pick=self._week_pick)
-        self.week.pack(fill="x", pady=(22, 0))
+        self.week.pack(fill="x", pady=(14, 0))
 
         # scrapbook void: pure empty paper for the doodles
         self.void = tk.Frame(parent, bg=th.PAPER)
         self.void._doodle_zone = True
-        self.void.pack(fill="both", expand=True, pady=(20, 0))
+        self.void.pack(fill="both", expand=True, pady=(14, 0))
 
     def _do_export(self):
         """Write the whole ledger to ~/Documents/MessLedger."""
@@ -864,7 +867,7 @@ class MealApp(tk.Tk):
         days_in = monthrange(cur.year, cur.month)[1]
         first = cur.replace(day=1)
         lead = first.weekday()
-        cells = []
+        cells, ticks = [], []
         for i in range(lead + days_in):
             d = first + timedelta(days=i - lead)
             e = mc.peek_day(d) if d <= now else {}
@@ -872,7 +875,14 @@ class MealApp(tk.Tk):
                         if e and e.get(m))
             expected = sum(mc.meal_value(m, d) for m in mc.MEALS)
             cells.append((d, eaten, expected))
-        self.month_grid.set_month(cells, today=now)
+            marks = {}
+            for m in mc.MEALS:
+                if mc.meal_value(m, d) <= 0:
+                    marks[m] = "closed"
+                else:
+                    marks[m] = bool(e.get(m))
+            ticks.append((d, marks))
+        self.month_grid.set_month(cells, today=now, ticks=ticks)
         self.month_title.configure(
             text=cur.strftime("%B %Y").upper())
         self.mon_eb.configure(text=f"ALMANAC \u2014 {cur.strftime('%B').upper()}")
@@ -880,7 +890,8 @@ class MealApp(tk.Tk):
         logged = sum(1 for d, en, ex in cells if en > 0)
         self.mon_note.configure(
             text=(f"{logged} of {days_in} days logged  \u00b7  "
-                  f"green bar means every offered meal was eaten"))
+                  f"each cell rules B L D: ticked when eaten, struck "
+                  f"when missed, a dash when not offered"))
         self.mon_folio.configure(text=f"p. {(now - mc.cycle_start(now)).days + 1:02d}")
 
     def _step(self, delta):

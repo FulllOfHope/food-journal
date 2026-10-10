@@ -53,6 +53,7 @@ SPINE     = "#e8e2d4"   # bound edge strip
 STITCH    = "#b3a88f"   # stitching thread
 STAMP     = "#b3402e"   # rubber-stamp red
 VEG       = "#2e7d46"   # shakahari green, for the veg mark
+HONEY     = "#d9a441"   # part-days: some meals taken, not all
 RED       = "#b3402e"   # danger is stamped red, like everything urgent
 
 # legacy aliases kept so untouched call-sites keep working
@@ -731,6 +732,133 @@ class Stamp(tk.Canvas):
 
 
 # ------------------------------------------------------- doodle stamp
+class MealBreakdown(tk.Canvas):
+    """Which meals actually get skipped: eaten vs expected for each one.
+
+    Saturday dinner is worth nothing, so it is listed as closed instead of
+    dragging the averages down with a fake miss."""
+
+    ROW_H = 34
+
+    def __init__(self, master, bg=PAPER, height=None, **kw):
+        super().__init__(master, height=height or self.ROW_H * 3 + 6, bg=bg,
+                         highlightthickness=0, bd=0, **kw)
+        self._stats = {}
+        self._days = 0
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def set_stats(self, stats, days):
+        self._stats = stats or {}
+        self._days = days
+        self.redraw()
+
+    def redraw(self):
+        self.delete("all")
+        w = max(1, self.winfo_width())
+        if w < 80 or not self._stats:
+            return
+        labels = {"breakfast": "BREAKFAST", "lunch": "LUNCH",
+                  "dinner": "DINNER"}
+        for i, meal in enumerate(("breakfast", "lunch", "dinner")):
+            d = self._stats.get(meal, {})
+            y = i * self.ROW_H
+            expected = d.get("expected", 0.0)
+            eaten = d.get("eaten", 0.0)
+            self.create_text(0, y + 8, text=labels[meal], anchor="w",
+                             fill=INK_SOFT, font=mono(10))
+            bar_x, bar_w = 92, max(40, w - 92 - 116)
+            self.create_rectangle(bar_x, y + 2, bar_x + bar_w, y + 16,
+                                  outline=RULE, width=1)
+            if expected > 0:
+                frac = max(0.0, min(1.0, eaten / expected))
+                self.create_rectangle(bar_x + 1, y + 3,
+                                      bar_x + 1 + (bar_w - 2) * frac, y + 15,
+                                      fill=VEG, outline="")
+            missed = d.get("missed", 0.0)
+            if expected <= 0:
+                note = "closed Sat"
+                col = PENCIL_LT
+            else:
+                note = f"{missed:g} missed \u00b7 {d.get('skipped', 0)} days"
+                col = RED if missed > 0 else PENCIL_LT
+            self.create_text(w, y + 9, text=note, anchor="e", fill=col,
+                             font=mono(10))
+
+
+class MonthGrid(tk.Canvas):
+    """A calendar month shaded by how many meals were eaten each day.
+
+    Click a cell to jump straight to editing that day."""
+
+    HEAD_H = 26
+    CELL_W = 0
+
+    def __init__(self, master, bg=PAPER, on_pick=None, **kw):
+        super().__init__(master, height=340, bg=bg, highlightthickness=0,
+                         bd=0, **kw)
+        self._cells = []
+        self._today = None
+        self._on_pick = on_pick
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def set_month(self, months, today=None):
+        """`months` is [(date, eaten, expected), ...] for one month."""
+        self._cells = list(months)
+        self._today = today
+        self.redraw()
+
+    def _pick(self, i):
+        if self._on_pick and 0 <= i < len(self._cells):
+            self._on_pick(self._cells[i][0])
+
+    def redraw(self):
+        self.delete("all")
+        w = max(1, self.winfo_width())
+        if w < 120 or not self._cells:
+            return
+        names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+        cw = w / 7.0
+        for c, n in enumerate(names):
+            self.create_text(cw * c + cw / 2, self.HEAD_H / 2, text=n,
+                             fill=PENCIL, font=mono(9))
+        self.create_line(0, self.HEAD_H, w, self.HEAD_H, fill=RULE, width=1)
+
+        rows = {}
+        for i, (d, eaten, expected) in enumerate(self._cells):
+            rows.setdefault(d.weekday(), []).append(i)
+        body_top = self.HEAD_H + 6
+        avail_h = max(60, self.winfo_height() - body_top - 4)
+        weeks = max(1, -(-len(self._cells) // 7))
+        ch = min(64.0, avail_h / weeks)
+        for i, (d, eaten, expected) in enumerate(self._cells):
+            r, c = divmod(i, 7)
+            x = cw * c
+            y = body_top + r * ch
+            today = (d == self._today)
+            self.create_rectangle(x + 3, y + 2, x + cw - 3, y + ch - 4,
+                                  outline=RULE, width=1)
+            if expected > 0 and eaten > 0:
+                frac = max(0.0, min(1.0, eaten / expected))
+                self.create_rectangle(x + 3, y + ch - 4 - (ch - 8) * frac,
+                                      x + cw - 3, y + ch - 4,
+                                      fill=VEG if frac >= 1 else HONEY,
+                                      outline="")
+            self.create_text(x + 9, y + 13, text=d.strftime("%d"),
+                             anchor="w",
+                             fill=INK if today else INK_SOFT,
+                             font=mono(10))
+            if today:
+                self.create_oval(x + cw - 16, y + 5, x + cw - 6, y + 15,
+                                 fill=STAMP, outline="")
+            self.create_rectangle(x, y, x + cw, y + ch, fill="",
+                                  outline="", tags=f"m{i}")
+            self.tag_bind(f"m{i}", "<Button-1>", lambda e, k=i: self._pick(k))
+            self.tag_bind(f"m{i}", "<Enter>",
+                          lambda e: self.configure(cursor="hand2"))
+            self.tag_bind(f"m{i}", "<Leave>",
+                          lambda e: self.configure(cursor=""))
+
+
 class WeekStrip(tk.Canvas):
     """The last seven days as a row of little meal stamps, plus a ribbon
     showing how far through the billing cycle the month is."""

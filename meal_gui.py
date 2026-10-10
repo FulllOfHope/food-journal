@@ -10,6 +10,7 @@ actions.
 import random
 import sys
 import tkinter as tk
+from calendar import monthrange
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -212,6 +213,118 @@ def _overlaps(a, b, pad=0):
                 or a[3] + pad <= b[1] or b[3] + pad <= a[1])
 
 
+
+class SettingsSheet(tk.Toplevel):
+    """Prices, timings and the miss allowance, edited in place.
+
+    Writes back through meal_common.save_config, so the file stays the
+    single source of truth and hand-added keys survive."""
+
+    FIELDS = [
+        ("price_breakfast", "Price per breakfast", float, "0.01"),
+        ("price_lunch", "Price per lunch", float, "0.01"),
+        ("price_dinner", "Price per dinner", float, "0.01"),
+        ("tax_percent", "Tax percent", float, "0.1"),
+        ("allowed_misses_per_month", "Misses allowed per cycle", int, "1"),
+        ("nag_until", "Nightly nudge at (HH:MM)", str, None),
+        ("poll_interval_minutes", "Reminder poll (minutes)", int, "1"),
+        ("notification_timeout_seconds", "Reminder timeout (s)", int, "1"),
+    ]
+    TOGGLES = [
+        ("remind_breakfast", "Remind me at breakfast"),
+        ("remind_lunch", "Remind me at lunch"),
+        ("remind_dinner", "Remind me at dinner"),
+    ]
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.title("Mess Ledger \u2014 Settings")
+        self.configure(bg=th.PAPER)
+        self.transient(app)
+        self.vars = {}
+        cfg = mc.load_config()
+        outer = tk.Frame(self, bg=th.PAPER, padx=26, pady=20)
+        outer.pack(fill="both", expand=True)
+        tk.Label(outer, text="SETTINGS", bg=th.PAPER, fg=th.INK,
+                 font=th.display(18)).pack(anchor="w", pady=(0, 4))
+        tk.Label(outer, text=f"stored in {mc.CONFIG_DIR / 'config.ini'}",
+                 bg=th.PAPER, fg=th.PENCIL, font=th.mono(9)).pack(
+                     anchor="w", pady=(0, 16))
+
+        grid = tk.Frame(outer, bg=th.PAPER)
+        grid.pack(fill="x")
+        for row, (key, label, kind, step) in enumerate(self.FIELDS):
+            tk.Label(grid, text=label, bg=th.PAPER, fg=th.INK_SOFT,
+                     font=th.body(11)).grid(row=row, column=0, sticky="w",
+                                            pady=5, padx=(0, 14))
+            var = tk.StringVar(value=str(cfg.get(key)))
+            self.vars[key] = (var, kind)
+            entry = tk.Entry(grid, textvariable=var, width=12,
+                             bg=th.CARD_HI, fg=th.INK, font=th.mono(12),
+                             justify="right", relief="flat", bd=0,
+                             highlightthickness=1,
+                             highlightbackground=th.RULE_DK)
+            entry.grid(row=row, column=1, sticky="e", pady=5)
+            if step:
+                tk.Label(grid, text=step, bg=th.PAPER, fg=th.PENCIL_LT,
+                         font=th.mono(9)).grid(row=row, column=2, sticky="w",
+                                               padx=(8, 0))
+
+        base = len(self.FIELDS) + 1
+        for i, (key, label) in enumerate(self.TOGGLES):
+            var = tk.BooleanVar(value=bool(cfg.get(key)))
+            self.vars[key] = (var, bool)
+            cb = tk.Checkbutton(grid, text=label, variable=var,
+                                bg=th.PAPER, fg=th.INK_SOFT,
+                                font=th.body(11), anchor="w",
+                                highlightthickness=0, bd=0,
+                                selectcolor=th.CARD_HI,
+                                activebackground=th.PAPER,
+                                activeforeground=th.INK_SOFT)
+            cb.grid(row=base + i, column=0, columnspan=2, sticky="w",
+                    pady=5)
+
+        self.msg = tk.Label(outer, text="", bg=th.PAPER, fg=th.STAMP,
+                            font=th.mono(10), anchor="w")
+        self.msg.pack(fill="x", pady=(14, 0))
+        bar = tk.Frame(outer, bg=th.PAPER)
+        bar.pack(fill="x", pady=(10, 0))
+        th.RoundedButton(bar, "CANCEL", self.destroy,
+                      kind="ghost").pack(side="right")
+        th.RoundedButton(bar, "SAVE", self._save,
+                      kind="primary").pack(side="right", padx=(0, 10))
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.bind("<Return>", lambda e: self._save())
+
+    def _save(self):
+        out = {}
+        for key, (var, kind) in self.vars.items():
+            raw = var.get()
+            if kind is bool:
+                out[key] = bool(raw)
+                continue
+            raw = str(raw).strip()
+            try:
+                if kind is int:
+                    out[key] = int(raw)
+                elif kind is float:
+                    out[key] = float(raw)
+                else:
+                    out[key] = raw
+            except (TypeError, ValueError):
+                self.msg.configure(text=f"{key}: {raw!r} is not valid")
+                return
+        try:
+            mc.save_config(out)
+        except Exception as exc:
+            self.msg.configure(text=f"could not save: {exc}")
+            return
+        self.app.refresh_all()
+        self.app.flash("settings saved")
+        self.destroy()
+
+
 class MealApp(tk.Tk):
     def __init__(self):
         super().__init__(className="FoodJournal")
@@ -282,7 +395,7 @@ class MealApp(tk.Tk):
         tabs = tk.Frame(head, bg=th.PAPER)
         tabs.pack(side="right")
         self.tab_ui = {}
-        for name in ("TODAY", "LOG / EDIT", "INSIGHTS"):
+        for name in ("TODAY", "LOG / EDIT", "MONTH", "INSIGHTS"):
             holder = tk.Frame(tabs, bg=th.PAPER)
             lbl = tk.Label(holder, text=name, bg=th.PAPER, fg=th.PENCIL,
                            font=th.mono(10), padx=12, pady=8,
@@ -304,13 +417,14 @@ class MealApp(tk.Tk):
         self.banners = {
             name: th.PhotoBanner(self.paper, height=BAND_H, photo=_sky,
                                  anchor=0.80)
-            for name in ("TODAY", "LOG / EDIT", "INSIGHTS")
+            for name in ("TODAY", "LOG / EDIT", "MONTH", "INSIGHTS")
         }
 
         # -- views
         self.views = {}
         for name, builder in (("TODAY", self._build_today),
                               ("LOG / EDIT", self._build_log),
+                              ("MONTH", self._build_month),
                               ("INSIGHTS", self._build_insights)):
             frame = tk.Frame(self.paper, bg=th.PAPER)
             builder(frame)
@@ -328,6 +442,12 @@ class MealApp(tk.Tk):
         self.footer_right = tk.Label(frow, bg=th.PAPER, fg=th.PENCIL,
                                      font=th.mono(10))
         self.footer_right.pack(side="right")
+        btns = tk.Frame(frow, bg=th.PAPER)
+        btns.pack(side="right", padx=(0, 16))
+        th.RoundedButton(btns, "SETTINGS", self._open_settings,
+                      kind="ghost").pack(side="left", padx=(8, 0))
+        th.RoundedButton(btns, "EXPORT", self._do_export,
+                      kind="ghost").pack(side="left")
 
         self._show("TODAY")
         if len(sys.argv) > 1 and sys.argv[1].lower().startswith("log"):
@@ -579,6 +699,34 @@ class MealApp(tk.Tk):
         self.void._doodle_zone = True
         self.void.pack(fill="both", expand=True, pady=(20, 0))
 
+    def _do_export(self):
+        """Write the whole ledger to ~/Documents/MessLedger."""
+        try:
+            files = mc.export_history("both")
+            where = files[0].parent if files else mc.export_dir()
+            self.flash(f"exported {len(files)} files \u00b7 {where}")
+        except Exception as exc:
+            self.flash(f"export failed: {exc}", bad=True)
+
+    def flash(self, text, bad=False, ms=6000):
+        """Show a short-lived note in the footer."""
+        self.footer_left.configure(text=text, fg=th.STAMP if bad
+                                  else th.INK_SOFT)
+        prev = getattr(self, "_flash_job", None)
+        if prev is not None:
+            try:
+                self.after_cancel(prev)
+            except Exception:
+                pass
+        self._flash_job = self.after(ms, self._flash_clear)
+
+    def _flash_clear(self):
+        self._flash_job = None
+        self.refresh_chrome()
+
+    def _open_settings(self):
+        SettingsSheet(self)
+
     def _week_pick(self, day):
         """Click a stamp in the week strip to edit that day."""
         self.log_date = day
@@ -649,6 +797,63 @@ class MealApp(tk.Tk):
         self._hist_keys = []
         self._hist_div = None
 
+    # ------------------------------------------------------------ MONTH
+    def _build_month(self, parent):
+        self._masthead(parent, "mon")
+        nav = tk.Frame(parent, bg=th.PAPER)
+        nav.pack(fill="x", pady=(0, 14))
+        th.RoundedButton(nav, "< EARLIER", lambda: self._month_step(-1),
+                      kind="ghost").pack(side="left")
+        self.month_title = tk.Label(nav, bg=th.PAPER, fg=th.INK_SOFT,
+                                    font=th.mono(12))
+        self.month_title.pack(side="left", expand=True)
+        th.RoundedButton(nav, "LATER >", lambda: self._month_step(1),
+                      kind="ghost").pack(side="right")
+        self.month_grid = th.MonthGrid(parent, bg=th.PAPER,
+                                       on_pick=self._month_pick)
+        self.month_grid.pack(fill="both", expand=True)
+        self.month_note = tk.Label(parent, bg=th.PAPER, fg=th.PENCIL,
+                                   font=th.mono(10), anchor="w")
+        self.month_note.pack(fill="x", pady=(12, 0))
+        self._month_cursor = mc.today().replace(day=1)
+
+    def _month_step(self, delta):
+        d = self._month_cursor
+        month = d.month - 1 + delta
+        year = d.year + (month - 1) // 12
+        self._month_cursor = d.replace(year=year,
+                                       month=(month - 1) % 12 + 1, day=1)
+        self.refresh_month()
+
+    def _month_pick(self, day):
+        self.log_date = day
+        self._show("LOG / EDIT")
+
+    def refresh_month(self):
+        now = mc.today()
+        cur = self._month_cursor
+        days_in = monthrange(cur.year, cur.month)[1]
+        first = cur.replace(day=1)
+        lead = first.weekday()
+        cells = []
+        for i in range(lead + days_in):
+            d = first + timedelta(days=i - lead)
+            e = mc.peek_day(d) if d <= now else {}
+            eaten = sum(mc.meal_value(m, d) for m in mc.MEALS
+                        if e and e.get(m))
+            expected = sum(mc.meal_value(m, d) for m in mc.MEALS)
+            cells.append((d, eaten, expected))
+        self.month_grid.set_month(cells, today=now)
+        self.month_title.configure(
+            text=cur.strftime("%B %Y").upper())
+        self.mon_eb.configure(text=f"ALMANAC \u2014 {cur.strftime('%B').upper()}")
+        self.mon_date.configure(text=cur.strftime("%B %Y"))
+        logged = sum(1 for d, en, ex in cells if en > 0)
+        self.mon_note.configure(
+            text=(f"{logged} of {days_in} days logged  \u00b7  "
+                  f"green bar means every offered meal was eaten"))
+        self.mon_folio.configure(text=f"p. {(now - mc.cycle_start(now)).days + 1:02d}")
+
     def _step(self, delta):
         self.log_date += timedelta(days=delta)
         self.refresh_active()
@@ -709,6 +914,17 @@ class MealApp(tk.Tk):
                                font=th.mono(11))
         self.ins_b2.pack(anchor="w")
 
+        th.hline(body, pady=(20, 14))
+        bh = tk.Frame(body, bg=th.PAPER)
+        bh.pack(fill="x", pady=(0, 6))
+        tk.Label(bh, text="WHICH MEALS GET SKIPPED", bg=th.PAPER,
+                 fg=th.PENCIL, font=th.mono(10)).pack(side="left")
+        self.ins_break_head = tk.Label(bh, bg=th.PAPER, fg=th.PENCIL,
+                                       font=th.mono(10))
+        self.ins_break_head.pack(side="right")
+        self.ins_break = th.MealBreakdown(body, bg=th.PAPER)
+        self.ins_break.pack(fill="x")
+
         th.hline(body, pady=(20, 20))
         brow2 = tk.Frame(body, bg=th.PAPER)
         brow2.pack(fill="x", pady=(0, 8))
@@ -754,6 +970,7 @@ class MealApp(tk.Tk):
         self.refresh_chrome()
         self.refresh_today()
         self.refresh_log()
+        self.refresh_month()
         self.refresh_insights()
 
     def refresh_active(self):
@@ -761,6 +978,7 @@ class MealApp(tk.Tk):
         self.refresh_chrome()
         {"TODAY": self.refresh_today,
          "LOG / EDIT": self.refresh_log,
+         "MONTH": self.refresh_month,
          "INSIGHTS": self.refresh_insights}[self.active_view]()
 
     def _cycle_facts(self):
@@ -1097,6 +1315,11 @@ class MealApp(tk.Tk):
             missing.append(e is None)
         self.ins_chart.set_data(values, labels=labels, colors=colors,
                                 missing=missing, split_at=2)
+        st, days = mc.per_meal_stats(cs, now)
+        self.ins_break.set_stats(st, days)
+        self.ins_break_head.configure(
+            text=(f"day 1-{days} of this cycle" if days
+                  else "no days logged yet"))
         self.ins_chart_note.configure(
             text=(f"{rng_start.strftime('%d %b')}\u2013"
                   f"{(cs - timedelta(days=1)).strftime('%d %b')} previous "

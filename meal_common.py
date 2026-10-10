@@ -71,6 +71,122 @@ def load_config():
         "allowed_misses_per_month": geti("allowed_misses_per_month", 25),
     }
 
+CONFIG_KEYS = [
+    ("remind_breakfast", bool), ("remind_lunch", bool),
+    ("remind_dinner", bool), ("notification_timeout_seconds", int),
+    ("poll_interval_minutes", int), ("nag_until", str),
+    ("price_breakfast", float), ("price_lunch", float),
+    ("price_dinner", float), ("tax_percent", float),
+    ("allowed_misses_per_month", int),
+]
+
+
+def save_config(values: dict):
+    """Write the [settings] block back to config.ini.
+
+    Only the known keys are written, so hand-added notes in the file are
+    preserved, and an unknown key never sneaks in from the UI."""
+    ensure_dirs()
+    cfg = configparser.ConfigParser()
+    path = CONFIG_DIR / "config.ini"
+    if path.exists():
+        cfg.read(path)
+    if "settings" not in cfg:
+        cfg["settings"] = {}
+    for key, _kind in CONFIG_KEYS:
+        if key in values:
+            cfg["settings"][key] = str(values[key])
+    tmp = path.with_suffix(".ini.tmp")
+    with open(tmp, "w") as fh:
+        cfg.write(fh)
+    tmp.replace(path)
+    return dict(load_config())
+
+
+def export_dir():
+    """Where exports land: ~/Documents/MessLedger, created on demand."""
+    base = Path.home() / "Documents" / "MessLedger"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def export_history(fmt="both"):
+    """Write the whole ledger out as CSV rows and/or a JSON backup.
+
+    Returns the list of files written. Nothing here touches the live
+    history file, it is only ever read."""
+    hist = load_history()
+    cfg = load_config()
+    rows = []
+    for key in sorted(hist):
+        e = hist[key]
+        d = datetime.strptime(key, "%Y-%m-%d")
+        eaten = sum(meal_value(m, d) for m in MEALS if e.get(m))
+        expected = sum(meal_value(m, d) for m in MEALS)
+        bill, tax = day_bill(e, d)
+        rows.append({
+            "date": key,
+            "weekday": e.get("weekday", _day_name(d)),
+            "breakfast": bool(e.get("breakfast")),
+            "lunch": bool(e.get("lunch")),
+            "dinner": bool(e.get("dinner")),
+            "meals_eaten": round(eaten, 2),
+            "meals_expected": round(expected, 2),
+            "missed": round(max(0.0, expected - eaten), 2),
+            "bill": round(bill, 2),
+        })
+    written = []
+    out = export_dir()
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    if fmt in ("csv", "both"):
+        path = out / f"meals-{stamp}.csv"
+        cols = ["date", "weekday", "breakfast", "lunch", "dinner",
+                "meals_eaten", "meals_expected", "missed", "bill"]
+        with open(path, "w", newline="") as fh:
+            fh.write(",".join(cols) + "\n")
+            for r in rows:
+                fh.write(",".join(str(r[c]) for c in cols) + "\n")
+        written.append(path)
+    if fmt in ("json", "both"):
+        path = out / f"meals-{stamp}.json"
+        payload = {"exported_at": datetime.now().isoformat(timespec="seconds"),
+                   "config": cfg, "days": rows}
+        with open(path, "w") as fh:
+            json.dump(payload, fh, indent=2)
+        written.append(path)
+    return written
+
+
+def per_meal_stats(start: datetime, end: datetime):
+    """Eaten vs expected meal credits for each meal across a date range.
+
+    Saturday dinner is worth 0, so it is reported separately as closed
+    rather than folded into the miss counts."""
+    out = {}
+    for m in MEALS:
+        out[m] = {"eaten": 0.0, "expected": 0.0, "offered": 0,
+                  "skipped": 0}
+    days = 0
+    for d in daterange(start, end):
+        e = get_day_entry(d)
+        days += 1
+        for m in MEALS:
+            worth = meal_value(m, d)
+            if worth <= 0:
+                continue
+            out[m]["offered"] += 1
+            out[m]["expected"] += worth
+            if e.get(m):
+                out[m]["eaten"] += worth
+            else:
+                out[m]["skipped"] += 1
+    for m in out:
+        out[m]["missed"] = round(out[m]["expected"] - out[m]["eaten"], 2)
+        out[m]["eaten"] = round(out[m]["eaten"], 2)
+        out[m]["expected"] = round(out[m]["expected"], 2)
+    return out, days
+
+
 def _hhmm(value: str, fallback=(23, 30)):
     try:
         hh, mm = value.strip().split(":")[:2]

@@ -1150,11 +1150,10 @@ class MealApp(tk.Tk):
             text=f"ENTRY \u2014 {now.strftime('%A').upper()}")
         self.today_date.configure(text=now.strftime("%d %B %Y"))
         self.today_note.configure(
-            text=(f"day {day_no} of {total_days} \u00b7 batch {batch} "
-                  f"\u2014 {a['remaining']:g} misses left"
+            text=(f"batch {batch} \u00b7 {a['remaining']:g} misses left"
                   if not over else
-                  f"day {day_no} of {total_days} \u00b7 batch {batch} "
-                  f"\u2014 over by {a['over']:g}, mind the stamp"),
+                  f"batch {batch} \u00b7 over by {a['over']:g}, "
+                  f"mind the stamp"),
             fg=th.INK_SOFT if not over else th.STAMP)
         self.today_folio.configure(text=f"p. {day_no:02d}")
         self.banners["TODAY"].set_stamp(now.strftime("%d %b %Y").upper())
@@ -1162,14 +1161,11 @@ class MealApp(tk.Tk):
         self.footer_left.configure(
             text=(f"Cycle {cs.strftime('%d %b')} \u2013 "
                   f"{ce.strftime('%d %b')}  \u00b7  "
-                  f"Day {day_no} of {total_days} \u00b7  "
-                  f"Batch {batch}      "
                   f"Misses {a['missed']:g} / {a['allowed']:g}"
                   + (f" \u2014 OVERDUE BY {a['over']:g}" if over else "")
-                  + f"      Bill {rupees(b['total'])}"),
+                  + f"  \u00b7  Bill {rupees(b['total'])}"),
             fg=th.STAMP if over else th.INK_SOFT)
-        self.footer_right.configure(
-            text=f"p. {day_no:02d}   \u00b7   B / L / D TO LOG")
+        self.footer_right.configure(text="B / L / D TO LOG")
 
     def refresh_today(self):
         now = mc.today()

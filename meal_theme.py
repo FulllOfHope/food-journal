@@ -416,12 +416,10 @@ def cover_fit(img, w, h, anchor=0.5):
     return img.crop((x, y, x + w, y + h))
 
 
-def stretch_fit(img, w, h):
-    """Scale img to exactly (w, h), keeping every pixel of it visible.
-
-    Aspect is deliberately ignored so one photo can run edge to edge
-    across the page without being cropped."""
-    return img.resize((max(1, int(w)), max(1, int(h))), Image.LANCZOS)
+def band_fit(img, w, h, anchor=0.45):
+    """Fill a wide, short band with one photo, cropped rather than
+    squashed, so the artwork keeps its proportions edge to edge."""
+    return cover_fit(img, w, h, anchor)
 
 
 def feather_edges(img, top=30, bottom=56):
@@ -510,13 +508,14 @@ class PhotoBanner(tk.Canvas):
             return
         photo = self._photo and _PIL
         if photo:
-            key = (_ART_VERSION, "stretch", self._photo,
-                   _file_stamp(self._photo), w, h)
+            key = (_ART_VERSION, "band", self._photo,
+                   _file_stamp(self._photo), w, h,
+                   round(self._anchor, 3))
             if key != self._key:
                 try:
                     def build(w=w, h=h):
                         img = Image.open(self._photo).convert("RGB")
-                        return stretch_fit(img, w, h)
+                        return band_fit(img, w, h, self._anchor)
                     self._img = ImageTk.PhotoImage(cached_image(key, build))
                     self._key = key
                 except Exception:
@@ -693,6 +692,15 @@ class Doodle(tk.Canvas):
     SPARK = "#d9a441"
     GRAIN = "#d9a441"
     GRAIN_DK = "#8a6a25"
+    LEMON = "#e6c33c"
+    LEMON_DK = "#ab8a1c"
+    SKY = "#c3dcee"
+    SKY_DK = "#8ab4d2"
+    PETAL = "#fbf7ec"
+    POLLEN = "#dfae3a"
+    BERRY = "#c0453a"
+    TAPE_A = "#d6e6c6"
+    TAPE_B = "#e9d3c2"
 
     def __init__(self, master, doodle="tangerine", size=110, bg=PAPER,
                  **kw):
@@ -704,7 +712,19 @@ class Doodle(tk.Canvas):
          "wheat": self._wheat,
          "star": self._star,
          "leaf": self._leaf,
-         "chili": self._chili}.get(doodle, self._tangerine)(cx, cy)
+         "chili": self._chili,
+         "lemon": self._lemon,
+         "slice": self._slice,
+         "daisy": self._daisy,
+         "butterfly": self._butterfly,
+         "bee": self._bee,
+         "cloud": self._cloud,
+         "sun": self._sun,
+         "bird": self._bird,
+         "heart": self._heart,
+         "bow": self._bow,
+         "tape": self._tape,
+         "stamp": self._stamp}.get(doodle, self._tangerine)(cx, cy)
 
     def _tangerine(self, x, y):
         self.create_oval(x - 16, y - 15, x + 16, y + 15, fill=self.FRUIT,
@@ -761,6 +781,115 @@ class Doodle(tk.Canvas):
                          width=2)
         self.create_line(x + 19, y - 14, x + 23, y - 18, fill=self.LEAF,
                          width=2)
+
+
+    def _lemon(self, x, y):
+        self.create_oval(x - 17, y - 13, x + 15, y + 13, fill=self.LEMON,
+                         outline=self.LEMON_DK, width=2.5)
+        self.create_polygon([(x - 17, y - 4), (x - 25, y - 9),
+                             (x - 25, y + 1)], fill=self.LEMON,
+                            outline=self.LEMON_DK, width=2)
+        self.create_line(x + 2, y - 13, x + 8, y - 22, fill=self.LEAF,
+                         width=2.5)
+
+    def _slice(self, x, y):
+        self.create_oval(x - 17, y - 17, x + 17, y + 17, fill=self.FRUIT,
+                         outline=self.FRUIT_DK, width=2.5)
+        self.create_oval(x - 12, y - 12, x + 12, y + 12, fill=self.FRUIT_HI,
+                         outline="")
+        for a in range(0, 360, 45):
+            import math as _m
+            r = _m.radians(a)
+            self.create_line(x, y, x + 11 * _m.cos(r), y + 11 * _m.sin(r),
+                             fill=self.FRUIT_DK, width=1.6)
+
+    def _daisy(self, x, y):
+        for dx, dy in ((0, -13), (11, -4), (7, 10), (-7, 10), (-11, -4)):
+            self.create_oval(x + dx - 7, y + dy - 7, x + dx + 7, y + dy + 7,
+                             fill=self.PETAL, outline=self.SKY_DK,
+                             width=1.6)
+        self.create_oval(x - 7, y - 7, x + 7, y + 7, fill=self.POLLEN,
+                         outline="")
+
+    def _butterfly(self, x, y):
+        for sgn in (1, -1):
+            self.create_oval(x + sgn * 5 - 10, y - 15, x + sgn * 5 + 10,
+                             y - 1, fill=self.SPARK, outline=self.FRUIT_DK,
+                             width=1.8)
+            self.create_oval(x + sgn * 5 - 8, y - 1, x + sgn * 5 + 8, y + 14,
+                             fill=self.FRUIT_HI, outline=self.FRUIT_DK,
+                             width=1.8)
+        self.create_line(x, y - 12, x, y + 12, fill=self.BARK, width=2.5)
+        self.create_line(x, y - 12, x - 6, y - 21, fill=self.BARK, width=1.6)
+        self.create_line(x, y - 12, x + 6, y - 21, fill=self.BARK, width=1.6)
+
+    def _bee(self, x, y):
+        self.create_oval(x - 13, y - 12, x + 12, y + 12, fill=self.SPARK,
+                         outline=self.FRUIT_DK, width=2)
+        for dx in (-4, 4):
+            self.create_line(x + dx - 3, y - 10, x + dx - 3, y + 10,
+                             fill=self.BARK, width=2.5)
+        self.create_oval(x + 12, y - 10, x + 24, y + 1, fill=self.SKY,
+                         outline=self.SKY_DK, width=1.6)
+        self.create_line(x - 13, y, x - 21, y - 5, fill=self.BARK, width=2)
+
+    def _cloud(self, x, y):
+        self.create_oval(x - 24, y - 4, x - 4, y + 12, fill=self.PETAL,
+                         outline=self.SKY_DK, width=2)
+        self.create_oval(x - 10, y - 13, x + 12, y + 10, fill=self.PETAL,
+                         outline=self.SKY_DK, width=2)
+        self.create_oval(x + 4, y - 2, x + 24, y + 12, fill=self.PETAL,
+                         outline=self.SKY_DK, width=2)
+        self.create_line(x - 20, y + 11, x + 20, y + 11, fill=self.SKY_DK,
+                         width=2)
+
+    def _sun(self, x, y):
+        import math as _m
+        for a in range(0, 360, 45):
+            r = _m.radians(a)
+            self.create_line(x + 15 * _m.cos(r), y + 15 * _m.sin(r),
+                             x + 23 * _m.cos(r), y + 23 * _m.sin(r),
+                             fill=self.SPARK, width=2.5)
+        self.create_oval(x - 13, y - 13, x + 13, y + 13, fill=self.SPARK,
+                         outline=self.GRAIN_DK, width=2)
+
+    def _bird(self, x, y):
+        for sgn in (1, -1):
+            self.create_arc(x + sgn * 2 - 11, y - 10, x + sgn * 2 + 11,
+                            y + 8, start=200 if sgn > 0 else 320,
+                            extent=140, style="arc", outline=INK_SOFT,
+                            width=2.5)
+
+    def _heart(self, x, y):
+        self.create_polygon([(x, y + 15), (x - 17, y - 2), (x - 13, y - 11),
+                             (x - 5, y - 12), (x, y - 6), (x + 5, y - 12),
+                             (x + 13, y - 11), (x + 17, y - 2)],
+                            fill=self.BERRY, outline="")
+
+    def _bow(self, x, y):
+        for sgn in (1, -1):
+            self.create_oval(x + sgn * 4 - 13, y - 10, x + sgn * 4 + 13,
+                             y + 8, fill=STAMP, outline="")
+            self.create_polygon([(x + sgn * 3, y + 4), (x + sgn * 12, y + 20),
+                                 (x + sgn * 5, y + 17), (x, y + 5)],
+                                fill=STAMP, outline="")
+        self.create_oval(x - 5, y - 6, x + 5, y + 5, fill=self.BERRY,
+                         outline="")
+
+    def _tape(self, x, y):
+        self.create_rectangle(x - 34, y - 9, x + 34, y + 9,
+                              fill=self.TAPE_A, outline="")
+        for dx in (-26, -8, 10, 28):
+            self.create_line(x + dx, y - 9, x + dx + 9, y + 9,
+                             fill=self.TAPE_B, width=5)
+
+    def _stamp(self, x, y):
+        self.create_rectangle(x - 17, y - 17, x + 17, y + 17,
+                              fill=self.PETAL, outline=RULE_DK,
+                              width=2, dash=(3, 3))
+        self.create_oval(x - 9, y - 6, x + 9, y + 11, fill=self.FRUIT,
+                         outline=self.FRUIT_DK, width=1.8)
+        self.create_line(x, y - 6, x + 3, y - 13, fill=self.LEAF, width=1.8)
 
 
 # ------------------------------------------------------- pencil marks

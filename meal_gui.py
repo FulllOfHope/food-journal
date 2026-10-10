@@ -201,7 +201,9 @@ class CardRow(tk.Frame):
 
 
 # ----------------------------------------------------------------- app
-DOODLE_KINDS = ["tangerine", "sprig", "wheat", "star", "leaf", "chili"]
+DOODLE_KINDS = ["tangerine", "lemon", "slice", "sprig", "wheat", "leaf",
+                "chili", "star", "daisy", "butterfly", "bee", "cloud",
+                "sun", "bird", "heart", "bow", "tape", "stamp"]
 
 
 def _overlaps(a, b, pad=0):
@@ -299,7 +301,8 @@ class MealApp(tk.Tk):
         # -- full-bleed photographic mastheads, one per view
         _sky = th.art("insights.jpg", "log.jpg", "bg.jpg")
         self.banners = {
-            name: th.PhotoBanner(self.paper, height=168, photo=_sky)
+            name: th.PhotoBanner(self.paper, height=168, photo=_sky,
+                                 anchor=0.45)
             for name in ("TODAY", "LOG / EDIT", "INSIGHTS")
         }
 
@@ -408,7 +411,7 @@ class MealApp(tk.Tk):
                                        rw * cell, rh * cell)
 
     def _scatter_doodles(self, container, count=6, smin=44, smax=76,
-                         gap=20, min_h=40, reserve=()):
+                         gap=20, min_h=40):
         """Place doodles on an even grid inside the page's emptiest patch.
 
         Returns (placed, widgets). The grid gives even spacing for free and
@@ -421,19 +424,8 @@ class MealApp(tk.Tk):
         if w < 140 or h < min_h:
             return 0, []
 
-        blocked = self._content_rects(container, [])
-        ox, oy = container.winfo_rootx(), container.winfo_rooty()
-        for wid in reserve:
-            try:
-                if wid is None or not wid.winfo_ismapped():
-                    continue
-                rx = wid.winfo_rootx() - ox
-                ry = wid.winfo_rooty() - oy
-                blocked.append((rx, ry, rx + wid.winfo_width(),
-                                ry + wid.winfo_height()))
-            except Exception:
-                continue
-        space = self._largest_free_rect(blocked, w, h)
+        space = self._largest_free_rect(
+            self._content_rects(container, []), w, h)
         if space is None:
             return 0, []
         fx, fy, fw, fh = space
@@ -809,24 +801,18 @@ class MealApp(tk.Tk):
         something now sits under a doodle, that scatter is rebuilt until
         it comes back clean, or until the page has no room left."""
         view = self.active_view
+        if view != "TODAY":
+            return
         page = getattr(self, "views", {}).get(view)
         if page is None:
             return
-        box = self.void if (view == "TODAY"
-                            and getattr(self, "void", None)) else page
+        box = self.void
         kept = getattr(self, "_doodles", {})
         done = getattr(self, "_doodled", set())
-        if view in done and self._doodles_clear(box, kept.get(view, [])):
+        if done and self._doodles_clear(box, kept.get(view, [])):
             return
 
-        mast = getattr(self, {"TODAY": "today", "LOG / EDIT": "logm",
-                              "INSIGHTS": "ins"}[view] + "_mast", None)
-        if view == "TODAY":
-            want, smin, smax, gap = 6, 44, 76, 20
-            reserve = ()
-        else:
-            want, smin, smax, gap = 3, 26, 40, 14
-            reserve = (mast,)
+        want, smin, smax, gap = 8, 44, 78, 20
 
         fresh = []
         for _attempt in range(4):
@@ -837,8 +823,7 @@ class MealApp(tk.Tk):
                     pass
             kept[view] = []
             made, fresh = self._scatter_doodles(box, count=want, smin=smin,
-                                                smax=smax, gap=gap,
-                                                reserve=reserve)
+                                                smax=smax, gap=gap)
             kept[view] = fresh
             if made == 0 or self._doodles_clear(box, fresh):
                 break

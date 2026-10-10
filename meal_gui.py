@@ -695,9 +695,9 @@ class MealApp(tk.Tk):
         left.pack(side="left")
         eb = th.eyebrow(left, "")
         eb.pack(anchor="w")
-        date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(25),
+        date = tk.Label(left, bg=th.PAPER, fg=th.INK, font=th.display(38),
                         anchor="w")
-        date.pack(anchor="w", pady=(8, 5))
+        date.pack(anchor="w", pady=(6, 4))
         note = tk.Label(left, bg=th.PAPER, fg=th.INK_SOFT, font=th.hand(16),
                         anchor="w")
         note.pack(anchor="w", pady=(0, 0))
@@ -708,7 +708,24 @@ class MealApp(tk.Tk):
         setattr(self, prefix + "_note", note)
         setattr(self, prefix + "_folio", folio)
         setattr(self, prefix + "_mast", mast)
+        mast.bind("<Configure>",
+                  lambda e, m=mast, d=date: self._fit_display(m, d))
+        self._fit_display(mast, date)
         return mast
+
+    def _fit_display(self, mast, date):
+        """Scale the display date to the measure, the way a page sets a
+        headline to its column rather than letting it run off the paper."""
+        try:
+            w = mast.winfo_width()
+        except Exception:
+            return
+        if w < 60:
+            return
+        size = 38 if w >= 1000 else 32 if w >= 860 else 26 if w >= 700 else 21
+        f = th.display(size)
+        if str(date.cget("font")) != str(f):
+            date.configure(font=f)
 
     # ------------------------------------------------------------ TODAY
     def _build_today(self, parent):
@@ -1206,6 +1223,18 @@ class MealApp(tk.Tk):
         box = self.void
         kept = getattr(self, "_doodles", {})
         done = getattr(self, "_doodled", set())
+        if (box.winfo_height() < 96 or box.winfo_width() < 320):
+            # too little paper left for marks worth drawing: give the
+            # space back rather than squeezing a row of tiny ones
+            for w in kept.get(view, []):
+                try:
+                    w.destroy()
+                except Exception:
+                    pass
+            kept[view] = []
+            self._doodles = kept
+            self._doodled = done | {view}
+            return
         mine = kept.get(view, [])
         if done and mine and self._doodles_clear(box, mine):
             return

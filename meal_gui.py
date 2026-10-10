@@ -781,6 +781,15 @@ class MealApp(tk.Tk):
     def _open_settings(self):
         SettingsSheet(self)
 
+    def _ledger_line(self, entry, day, bill):
+        """One ruled line, the way a ledger states a day.
+
+        `2 meals / 3 offered / Rs106.00` says what the day was worth and
+        what it owed, in the order a reader checks them."""
+        offered = sum(mc.meal_value(m, day) for m in mc.MEALS)
+        return (f"{entry['meals_counted']:g} meals  /  {offered:g} offered"
+                f"  /  {rupees(bill)}")
+
     def _week_pick(self, day):
         """Click a stamp in the week strip to edit that day."""
         self.log_date = day
@@ -1202,9 +1211,8 @@ class MealApp(tk.Tk):
         self.today_cards.set_day(now)
         today_e = mc.peek_day(now)
         today_bill, _ = mc.day_bill(today_e, now)
-        self.today_sum.configure(
-            text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
-                 f"{rupees(today_bill)}")
+        self.today_sum.configure(text=self._ledger_line(today_e, now,
+                                                        today_bill))
         cs = mc.cycle_start(now)
         self.week.set_days(self._week_data(now), today=now)
         self.week.set_progress((now - cs).days + 1, mc.cycle_days(now))
@@ -1291,8 +1299,7 @@ class MealApp(tk.Tk):
         self.logm_folio.configure(
             text=f"p. {_dno:02d}")
         self.log_title.configure(
-            text=f"Day total \u2014 {log_e['meals_counted']:g} meals  "
-                 f"\u00b7  {rupees(log_bill)}")
+            text=self._ledger_line(log_e, self.log_date, log_bill))
         self.log_seal.set(day_complete(self.log_date, log_e))
         self._fill_history()
         self.after_idle(self.hist_scroll.refresh)

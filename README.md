@@ -3,6 +3,10 @@
 A meal tracker styled as a bound paper journal. It nags you at login until
 the day's meals are logged.
 
+Four pages: **TODAY** (stamp the day, with a seven-day strip), **LOG / EDIT**
+(any single day), **MONTH** (a month almanac) and **INSIGHTS** (cycle stats,
+what actually gets skipped, and the bill).
+
 ## Rules
 
 - Breakfast = 0.5 meal
@@ -25,6 +29,45 @@ with its own venv):
 ```bash
 cd ~/bhu_meal_tracker && ./install.sh
 ```
+
+## Building a standalone binary
+
+```bash
+pip install --user pyinstaller
+./build.sh            # -> dist/MessLedger, one file, no Python needed
+./build.sh --onedir   # faster startup, a folder instead
+```
+
+Art and icons are bundled; settings, history and exports stay in the usual
+home directories so an upgrade never loses data.
+
+## Keys
+
+| key | does |
+| --- | --- |
+| `B` `L` `D` | toggle breakfast / lunch / dinner |
+| `Left` `Right` | previous or next day, or month on the almanac |
+| `/` | jump to a date (`11`, `11/10` or `2026-10-11`) |
+| `?` | key sheet |
+| `Esc` | close a sheet |
+
+Click any stamp in the TODAY week strip, or any cell in the MONTH almanac,
+to jump straight to editing that day. Hovering a history row floats a card
+with that day's meals and bill.
+
+## Your data
+
+Nothing leaves the machine. Two files matter:
+
+- `~/.local/share/bhu_meal_tracker/history.json` — every logged day
+- `~/.config/bhu_meal_tracker/config.ini` — prices, tax, miss allowance
+
+**EXPORT** in the footer writes both a CSV and a JSON backup to
+`~/Documents/MessLedger`. Worth doing occasionally; it is the only copy
+if the machine goes away.
+
+**SETTINGS** in the footer edits prices, tax percent, the miss allowance
+and the reminder timings, writing them straight back to `config.ini`.
 
 ## Usage
 

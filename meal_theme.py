@@ -1186,17 +1186,57 @@ class AllowanceBox(tk.Canvas):
     through with hand X marks (half misses get a single slash). Overflow
     past the allowance is stamped red."""
 
+    COMPACT_H = 30
+
     def __init__(self, master, cell=15, gap=5, per_row=25, bg=PAPER, **kw):
         super().__init__(master, bg=bg, highlightthickness=0, bd=0, **kw)
         self._cell, self._gap, self._row = cell, gap, per_row
         self._bg = bg
         self._used = 0.0
         self._allowed = 25
+        self.configure(height=self.COMPACT_H)
+        self.bind("<Enter>", lambda e: self.redraw())
+        self.bind("<Leave>", lambda e: self.draw_compact())
 
     def set_value(self, used, allowed=25):
         self._used = max(0.0, float(used))
         self._allowed = max(1, int(round(allowed)))
-        self.redraw()
+        if self.winfo_ismapped() and self._hovered():
+            self.redraw()
+        else:
+            self.draw_compact()
+
+    def _hovered(self):
+        try:
+            x, y = self.winfo_pointerxy()
+            return (self.winfo_rootx() <= x <= self.winfo_rootx()
+                    + self.winfo_width()
+                    and self.winfo_rooty() <= y <= self.winfo_rooty()
+                    + self.winfo_height())
+        except Exception:
+            return False
+
+    def draw_compact(self):
+        """A single slim bar instead of 25 boxes. Hover to open the grid."""
+        self.delete("all")
+        w = max(1, self.winfo_width())
+        self.configure(height=self.COMPACT_H)
+        left = max(0.0, self._allowed - self._used)
+        frac = max(0.0, min(1.0, self._used / float(self._allowed)))
+        y = 16
+        self.create_rectangle(0, y, w, y + 9, fill=GRAPH_BG, outline=RULE,
+                              width=1)
+        if frac > 0:
+            self.create_rectangle(0, y, w * frac, y + 9, fill=RED,
+                                  outline="")
+        self.create_text(0, 8, anchor="w",
+                         text=f"{self._used:g} misses used", fill=INK_SOFT,
+                         font=mono(10))
+        note = f"{left:g} left"
+        if left <= 0:
+            note = f"over by {self._used - self._allowed:g}"
+        self.create_text(w, 8, anchor="e", text=note,
+                         fill=RED if left <= 0 else PENCIL, font=mono(10))
 
     def redraw(self):
         self.delete("all")

@@ -203,6 +203,25 @@ class CardRow(tk.Frame):
 
 
 # ----------------------------------------------------------------- app
+def _parse_date(raw):
+    """Accept 11, 11/10 or 2026-10-11 and return a datetime, or None."""
+    now = mc.today()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m", "%d"):
+        try:
+            got = datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+        if fmt == "%d":
+            return now.replace(day=int(raw), hour=0, minute=0, second=0,
+                                microsecond=0)
+        if fmt == "%d/%m":
+            return now.replace(year=now.year, month=int(raw.split("/")[1]),
+                               day=int(raw.split("/")[0]), hour=0, minute=0,
+                               second=0, microsecond=0)
+        return got
+    return None
+
+
 DOODLE_KINDS = ["tangerine", "lemon", "slice", "sprig", "wheat", "leaf",
                 "chili", "star", "daisy", "butterfly", "bee", "cloud",
                 "sun", "bird", "heart", "bow", "tape", "stamp"]
@@ -359,6 +378,9 @@ class MealApp(tk.Tk):
         self.bind("<Key-D>", lambda e: self._key_meal("dinner"))
         self.bind("<Left>", lambda e: self._key_step(-1))
         self.bind("<Right>", lambda e: self._key_step(1))
+        self.bind("<slash>", lambda e: self._prompt_date())
+        self.bind("<question>", lambda e: self._open_help())
+        self.bind("<Escape>", lambda e: self._close_sheets())
         self.refresh_all()
         self._schedule_scatter()
 
@@ -789,6 +811,13 @@ class MealApp(tk.Tk):
         self.hist_scroll = th.ScrollFrame(parent, bg=th.PAPER)
         self.hist_scroll.pack(fill="both", expand=True)
         self.hist_inner = self.hist_scroll.inner
+        self.hist_preview = tk.Label(self, text="", justify="left", anchor="w",
+                                     bg=th.CARD_HI, fg=th.INK_SOFT,
+                                     font=th.mono(10), bd=1,
+                                     relief="flat",
+                                     highlightthickness=1,
+                                     highlightbackground=th.RULE_DK,
+                                     padx=8, pady=5)
         self.hist_thread = th.TimelineGutter(self.hist_inner, bg=th.PAPER)
         self.hist_thread.pack(side="left", fill="y")
         self.hist_list = tk.Frame(self.hist_inner, bg=th.PAPER)
@@ -882,6 +911,113 @@ class MealApp(tk.Tk):
     def _key_step(self, delta):
         if self.active_view == "LOG / EDIT":
             self._step(delta)
+        elif self.active_view == "MONTH":
+            self._month_step(delta)
+
+    # ------------------------------------------------- keyboard helpers
+    def _close_sheets(self):
+        for name in ("_jump_win", "_help_win"):
+            w = getattr(self, name, None)
+            if w is not None and w.winfo_exists():
+                try:
+                    w.destroy()
+                except Exception:
+                    pass
+                setattr(self, name, None)
+
+    def _prompt_date(self):
+        """Jump to a date: accepts 11, 11/10 or 2026-10-11."""
+        old = getattr(self, "_jump_win", None)
+        if old is not None and old.winfo_exists():
+            old.destroy()
+        win = tk.Toplevel(self)
+        self._jump_win = win
+        win.title("Go to date")
+        win.configure(bg=th.PAPER)
+        win.transient(self)
+        win.resizable(False, False)
+        tk.Label(win, text="GO TO DATE", bg=th.PAPER, fg=th.INK,
+                 font=th.display(15), padx=22, pady=(18, 2)).pack(
+                     anchor="w")
+        tk.Label(win, text="day  ·  day/month  ·  yyyy-mm-dd",
+                 bg=th.PAPER, fg=th.PENCIL, font=th.mono(9),
+                 padx=22).pack(anchor="w")
+        var = tk.StringVar()
+        entry = tk.Entry(win, textvariable=var, width=18, font=th.mono(14),
+                         bg=th.CARD_HI, fg=th.INK, justify="center",
+                         relief="flat", bd=0, highlightthickness=1,
+                         highlightbackground=th.RULE_DK)
+        entry.pack(padx=22, pady=(12, 4), ipady=4)
+        msg = tk.Label(win, text="", bg=th.PAPER, fg=th.STAMP,
+                       font=th.mono(10))
+        msg.pack(anchor="w", padx=22)
+
+        def go(*_a):
+            raw = var.get().strip()
+            if not raw:
+                return
+            day = _parse_date(raw)
+            if day is None:
+                msg.configure(text="could not read that date")
+                return
+            self.log_date = day
+            self._show("LOG / EDIT")
+            win.destroy()
+            self._jump_win = None
+
+        bar = tk.Frame(win, bg=th.PAPER)
+        bar.pack(fill="x", padx=22, pady=(12, 18))
+        th.RoundedButton(bar, "CANCEL", win.destroy, kind="ghost").pack(
+            side="right")
+        th.RoundedButton(bar, "GO", go, kind="primary").pack(
+            side="right", padx=(0, 8))
+        entry.focus_set()
+        entry.bind("<Return>", go)
+        win.bind("<Escape>", lambda e: (win.destroy(),
+                                        setattr(self, "_jump_win", None)))
+
+    HELP = [
+        ("TODAY", "stamp the meals for today"),
+        ("LOG / EDIT", "edit any single day"),
+        ("MONTH", "the month almanac"),
+        ("INSIGHTS", "cycle stats and charts"),
+        ("", ""),
+        ("B  /  L  /  D", "toggle breakfast, lunch, dinner"),
+        ("Left / Right", "previous or next day (or month)"),
+        ("/", "jump to a date"),
+        ("?", "this sheet"),
+        ("Esc", "close a sheet"),
+    ]
+
+    def _open_help(self):
+        old = getattr(self, "_help_win", None)
+        if old is not None and old.winfo_exists():
+            old.destroy()
+        win = tk.Toplevel(self)
+        self._help_win = win
+        win.title("Keyboard")
+        win.configure(bg=th.PAPER)
+        win.transient(self)
+        win.resizable(False, False)
+        tk.Label(win, text="KEYS", bg=th.PAPER, fg=th.INK,
+                 font=th.display(18), padx=26, pady=(20, 10)).pack(anchor="w")
+        body = tk.Frame(win, bg=th.PAPER, padx=26)
+        body.pack(fill="both", expand=True)
+        for i, (key, what) in enumerate(self.HELP):
+            if not key:
+                tk.Frame(body, bg=th.PAPER, height=8).grid(
+                    row=i, column=0, columnspan=2)
+                continue
+            tk.Label(body, text=key, bg=th.PAPER, fg=th.INK,
+                     font=th.mono(11), anchor="w", width=14).grid(
+                         row=i, column=0, sticky="w", pady=3)
+            tk.Label(body, text=what, bg=th.PAPER, fg=th.INK_SOFT,
+                     font=th.body(11), anchor="w").grid(
+                         row=i, column=1, sticky="w", pady=3)
+        th.RoundedButton(win, "CLOSE", win.destroy,
+                      kind="ghost").pack(pady=(14, 20))
+        win.bind("<Escape>", lambda e: (win.destroy(),
+                                        setattr(self, "_help_win", None)))
 
     # ---------------------------------------------------------- INSIGHTS
     def _build_insights(self, parent):
@@ -1147,6 +1283,43 @@ class MealApp(tk.Tk):
             self._make_hist_row(d)
         self._hist_keys = [mc._date_key(d) for d in dates]
 
+    def _show_hist_preview(self, h, ev=None):
+        """Float a small card beside a history row with that day's detail."""
+        d = h["date"]
+        e = mc.peek_day(d)
+        eaten = sum(mc.meal_value(m, d) for m in mc.MEALS if e.get(m))
+        expected = sum(mc.meal_value(m, d) for m in mc.MEALS)
+        bill, _tax = mc.day_bill(e, d)
+        bits = []
+        for m in mc.MEALS:
+            worth = mc.meal_value(m, d)
+            if worth <= 0:
+                bits.append(f"{m[:3]} closed")
+            else:
+                bits.append(f"{m[:3]} " + ("ate" if e.get(m) else "MISSED"))
+        txt = (f"{d.strftime('%a %d %b')}  \u00b7  {eaten:g} of {expected:g} meals"
+               f"  \u00b7  {rupees(bill)}\n"
+               + "   ".join(bits))
+        pv = self.hist_preview
+        pv.configure(text=txt)
+        try:
+            x = h["row"].winfo_rootx() - self.winfo_rootx()
+            y = (h["row"].winfo_rooty() - self.winfo_rooty()
+                 + h["row"].winfo_height() + 4)
+        except Exception:
+            return
+        w = max(220, pv.winfo_reqwidth() + 16)
+        x = max(4, min(x, self.winfo_width() - w - 8))
+        y = min(y, self.winfo_height() - pv.winfo_reqheight() - 46)
+        pv.place(x=x, y=y)
+        pv.lift()
+
+    def _hide_hist_preview(self):
+        try:
+            self.hist_preview.place_forget()
+        except Exception:
+            pass
+
     def _make_hist_row(self, d):
         key = mc._date_key(d)
         row = tk.Frame(self.hist_list, bg=th.PAPER, cursor="hand2")
@@ -1185,6 +1358,7 @@ class MealApp(tk.Tk):
                 c.configure(bg=bg)
             if not h["selected"]:
                 h["marker"].configure(bg=th.RULE_DK)
+            self._show_hist_preview(h, ev)
 
         def _leave(ev=None, h=h):
             bg = th.CARD if h["selected"] else th.PAPER
@@ -1194,6 +1368,7 @@ class MealApp(tk.Tk):
                 c.configure(bg=bg)
             if not h["selected"]:
                 h["marker"].configure(bg=th.PAPER)
+            self._hide_hist_preview()
 
         for w in [row] + h["cells"]:
             w.bind("<Button-1>", lambda e, dd=d: _pick(dd))

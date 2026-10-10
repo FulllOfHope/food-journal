@@ -19,6 +19,7 @@ import meal_common as mc
 import meal_theme as th
 
 APP_TITLE = "Mess Ledger"
+BAND_H = 196
 DOW3 = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 GUTTER = (84, 28)  # clear of the spine + margin rule, like a real page
 
@@ -301,7 +302,7 @@ class MealApp(tk.Tk):
         # -- full-bleed photographic mastheads, one per view
         _sky = th.art("insights.jpg", "log.jpg", "bg.jpg")
         self.banners = {
-            name: th.PhotoBanner(self.paper, height=168, photo=_sky,
+            name: th.PhotoBanner(self.paper, height=BAND_H, photo=_sky,
                                  anchor=0.80)
             for name in ("TODAY", "LOG / EDIT", "INSIGHTS")
         }
@@ -453,6 +454,7 @@ class MealApp(tk.Tk):
 
         cells = [(c, r) for r in range(rows) for c in range(cols)]
         random.shuffle(cells)
+        kinds = random.sample(DOODLE_KINDS, min(count, len(DOODLE_KINDS)))
         made, widgets = 0, []
         for c, r in cells:
             if made >= count:
@@ -462,9 +464,7 @@ class MealApp(tk.Tk):
             jy = random.uniform(-0.22, 0.22) * (cell_h - size)
             x = fx + c * cell_w + (cell_w - size) / 2 + jx
             y = fy + r * cell_h + (cell_h - size) / 2 + jy
-            widget = th.Doodle(container,
-                               doodle=random.choice(DOODLE_KINDS),
-                               size=size)
+            widget = th.Doodle(container, doodle=kinds[made], size=size)
             widget.place(x=int(x), y=int(y))
             widgets.append(widget)
             made += 1
@@ -570,10 +570,32 @@ class MealApp(tk.Tk):
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
+        self.week = th.WeekStrip(parent, bg=th.PAPER,
+                                 on_pick=self._week_pick)
+        self.week.pack(fill="x", pady=(22, 0))
+
         # scrapbook void: pure empty paper for the doodles
         self.void = tk.Frame(parent, bg=th.PAPER)
         self.void._doodle_zone = True
         self.void.pack(fill="both", expand=True, pady=(20, 0))
+
+    def _week_pick(self, day):
+        """Click a stamp in the week strip to edit that day."""
+        self.log_date = day
+        self._show("LOG / EDIT")
+
+    def _week_data(self, now):
+        """This week Monday to Sunday, with meals eaten vs expected."""
+        start = now - timedelta(days=now.weekday())
+        out = []
+        for i in range(7):
+            day = start + timedelta(days=i)
+            e = mc.peek_day(day) if day <= now else {}
+            eaten = sum(mc.meal_value(m, day) for m in mc.MEALS
+                        if e and e.get(m))
+            expected = sum(mc.meal_value(m, day) for m in mc.MEALS)
+            out.append((day, eaten, expected, day > now))
+        return out
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -771,6 +793,7 @@ class MealApp(tk.Tk):
                   f"\u2014 over by {a['over']:g}, mind the stamp"),
             fg=th.INK_SOFT if not over else th.STAMP)
         self.today_folio.configure(text=f"p. {day_no:02d}")
+        self.banners["TODAY"].set_stamp(now.strftime("%d %b %Y").upper())
 
         self.footer_left.configure(
             text=(f"Cycle {cs.strftime('%d %b')} \u2013 "
@@ -792,6 +815,9 @@ class MealApp(tk.Tk):
         self.today_sum.configure(
             text=f"Today \u2014 {today_e['meals_counted']:g} meals  \u00b7  "
                  f"{rupees(today_bill)}")
+        cs = mc.cycle_start(now)
+        self.week.set_days(self._week_data(now), today=now)
+        self.week.set_progress((now - cs).days + 1, mc.cycle_days(now))
 
     def _scatter_view(self):
         """Keep the live view's doodles in free paper, evenly spaced.

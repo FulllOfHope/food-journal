@@ -368,7 +368,7 @@ PAPER_RGB = (244, 241, 234)
 
 
 _CACHE_DIR = Path.home() / ".cache" / "mess-ledger" / "art"
-_ART_VERSION = 6  # bump whenever the art pipeline changes
+_ART_VERSION = 7  # bump whenever the art pipeline changes
 
 
 def _cache_path(key):
@@ -416,10 +416,39 @@ def cover_fit(img, w, h, anchor=0.5):
     return img.crop((x, y, x + w, y + h))
 
 
-def band_fit(img, w, h, anchor=0.45):
+def deckle(img, top=11, bottom=15, seed=7):
+    """Tear the top and bottom edges so a band reads as a pasted strip.
+
+    The edge is a couple of slow waves plus a fine fibre jitter, so it
+    undulates like paper instead of combing into a sawtooth. Deterministic
+    per column, so the tear never shimmers between redraws."""
+    w, h = img.size
+    out = img.convert("RGBA")
+    alpha = Image.new("L", (w, h), 255)
+    px = alpha.load()
+
+    def wave(x, k):
+        r = (x * 2654435761 + (seed + k) * 40503) & 0xFFFF
+        return (math.sin(x / (43.0 + 11 * k) + (r % 628) / 100.0) * 3.4
+                + math.sin(x / (15.0 + 7 * k) + ((r >> 6) % 628) / 100.0) * 1.7
+                + ((r >> 11) % 100) / 100.0 * 1.6)
+
+    for x in range(w):
+        t = top + wave(x, 0)
+        b = h - bottom - wave(x, 1)
+        for y in range(0, max(0, min(h, int(t)))):
+            px[x, y] = 0
+        for y in range(max(0, min(h, int(b))), h):
+            px[x, y] = 0
+    out.putalpha(alpha)
+    return out
+
+
+def band_fit(img, w, h, anchor=0.45, tear=True):
     """Fill a wide, short band with one photo, cropped rather than
     squashed, so the artwork keeps its proportions edge to edge."""
-    return cover_fit(img, w, h, anchor)
+    band = cover_fit(img, w, h, anchor)
+    return deckle(band) if tear else band
 
 
 def feather_edges(img, top=30, bottom=56):
@@ -487,7 +516,29 @@ class PhotoBanner(tk.Canvas):
         self._img = None
         self._key = None
         self._job = None
+        self._stamp_text = ""
         self.bind("<Configure>", self._on_resize)
+
+    def set_stamp(self, text):
+        """Rubber-stamp a date into the corner of the band."""
+        text = text or ""
+        if text == self._stamp_text:
+            return
+        self._stamp_text = text
+        self._draw_stamp()
+
+    def _draw_stamp(self):
+        self.delete("stamp")
+        if not self._stamp_text or self._img is None:
+            return
+        w, h = self.winfo_width(), self.winfo_height()
+        if w < 200 or h < 40:
+            return
+        cx, cy = w - 96, h - 44
+        self.create_rectangle(cx - 70, cy - 17, cx + 70, cy + 17,
+                              outline=STAMP, width=2, tags="stamp")
+        self.create_text(cx, cy, text=self._stamp_text, fill=STAMP, angle=-7,
+                         font=mono(12), tags="stamp")
 
     def _on_resize(self, _e=None):
         if self._job is not None:
@@ -535,6 +586,7 @@ class PhotoBanner(tk.Canvas):
                     self._key = None
         if self._img is not None:
             self.create_image(0, 0, image=self._img, anchor="nw")
+            self._draw_stamp()
 
 # ------------------------------------------------------- rubber stamp
 STAMP_SLOPE = math.tan(math.radians(-4))
@@ -679,6 +731,114 @@ class Stamp(tk.Canvas):
 
 
 # ------------------------------------------------------- doodle stamp
+class WeekStrip(tk.Canvas):
+    """The last seven days as a row of little meal stamps, plus a ribbon
+    showing how far through the billing cycle the month is."""
+
+    BOX = 26
+    BOX_Y = 12          # top of the stamp boxes
+    LETTER_Y = 50       # weekday initial
+    DATE_Y = 62         # day number
+    RIBBON_Y = 72       # progress rule
+    RIBBON_TXT = 84     # progress caption
+    TOTAL_H = 96
+
+    def __init__(self, master, bg=PAPER, on_pick=None, height=None,
+                 **kw):
+        super().__init__(master, height=height or self.TOTAL_H, bg=bg,
+                         highlightthickness=0, bd=0, **kw)
+        self._days = []
+        self._today = None
+        self._progress = (0, 0)
+        self._on_pick = on_pick
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def set_days(self, days, today=None):
+        self._days = list(days)
+        self._today = today
+        self.redraw()
+
+    def set_progress(self, done, total):
+        self._progress = (done, total)
+        self.redraw()
+
+    def _pick(self, index):
+        if self._on_pick and index < len(self._days):
+            self._on_pick(self._days[index][0])
+
+    def redraw(self):
+        self.delete("all")
+        w = max(1, self.winfo_width())
+        days = self._days
+        if not days:
+            return
+        cw = w / float(len(days))
+        by0 = self.BOX_Y
+        for i, (d, eaten, expected, future) in enumerate(days):
+            cx = cw * i + cw / 2
+            box = self.BOX
+            hot = (self._today is not None and d == self._today)
+            if future:
+                self.create_rectangle(cx - box / 2, by0, cx + box / 2,
+                                      by0 + box, outline=RULE, width=1.5,
+                                      dash=(3, 3))
+                self.create_text(cx, by0 + box / 2, text="·",
+                                 fill=PENCIL_LT, font=body(14))
+            elif expected <= 0:
+                # Saturday dinner is closed: a quiet dot, never a miss
+                self.create_oval(cx - 3, by0 + box / 2 - 3, cx + 3,
+                                 by0 + box / 2 + 3, fill=RULE_DK, outline="")
+            elif eaten >= expected:
+                self.create_rectangle(cx - box / 2, by0, cx + box / 2,
+                                      by0 + box, fill=STAMP, outline=STAMP,
+                                      width=2)
+                self.create_line(cx - 7, by0 + box / 2, cx - 2,
+                                 by0 + box / 2 + 6, fill=CARD_HI, width=2.5,
+                                 capstyle="round")
+                self.create_line(cx - 2, by0 + box / 2 + 6, cx + 8,
+                                 by0 + box / 2 - 6, fill=CARD_HI, width=2.5,
+                                 capstyle="round")
+            elif eaten > 0:
+                self.create_rectangle(cx - box / 2, by0, cx + box / 2,
+                                      by0 + box, outline=STAMP, width=2,
+                                      dash=(4, 3))
+                self.create_rectangle(cx - box / 2, by0 + box * eaten /
+                                      expected, cx + box / 2, by0 + box,
+                                      fill=STAMP, outline="")
+            else:
+                self.create_rectangle(cx - box / 2, by0, cx + box / 2,
+                                      by0 + box, outline=RULE_DK, width=1.5,
+                                      dash=(4, 3))
+            self.create_text(cx, self.LETTER_Y, text=d.strftime("%a")[0],
+                             fill=INK if hot else PENCIL, font=mono(11))
+            self.create_text(cx, self.DATE_Y, text=d.strftime("%d"),
+                             fill=PENCIL_LT, font=mono(9))
+            if hot:
+                self.create_oval(cx - box / 2 - 5, by0 - 5, cx + box / 2 + 5,
+                                 by0 + box + 5, outline=INK, width=1.2)
+            self.create_rectangle(cw * i, 0, cw * (i + 1), self.DATE_Y + 6,
+                                  fill="", outline="", tags=f"hit{i}")
+            self.tag_bind(f"hit{i}", "<Button-1>",
+                          lambda e, k=i: self._pick(k))
+            self.tag_bind(f"hit{i}", "<Enter>",
+                          lambda e, k=i: self.configure(cursor="hand2"))
+            self.tag_bind(f"hit{i}", "<Leave>",
+                          lambda e: self.configure(cursor=""))
+
+        ry = self.RIBBON_Y
+        self.create_line(0, ry, w, ry, fill=RULE, width=1)
+        done, total = self._progress
+        frac = 0.0 if not total else max(0.0, min(1.0, done / float(total)))
+        if frac > 0:
+            self.create_line(0, ry, w * frac, ry, fill=STAMP, width=3)
+        self.create_text(0, self.RIBBON_TXT,
+                         text=f"CYCLE  {done} / {total} DAYS",
+                         anchor="w", fill=PENCIL, font=mono(9))
+        self.create_text(w, self.RIBBON_TXT,
+                         text=f"{frac * 100:.0f}% through",
+                         anchor="e", fill=PENCIL, font=mono(9))
+
+
 class Doodle(tk.Canvas):
     """A bare hand-drawn veg doodle for the empty stretches: flat
     storybook fills with depth, no box, no words. Static art."""

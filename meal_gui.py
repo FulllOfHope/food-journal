@@ -674,6 +674,18 @@ class MealApp(tk.Tk):
             self._doodled = set()
         self._scatter_view()
 
+    def _kicker(self, prefix, text):
+        """Show a kicker only when it carries something the title and the
+        section's position do not already say, and never leave a gap."""
+        lbl = getattr(self, prefix + "_eb")
+        text = text or ""
+        lbl.configure(text=text)
+        if text:
+            if not lbl.winfo_ismapped():
+                lbl.pack(anchor="w")
+        elif lbl.winfo_ismapped():
+            lbl.pack_forget()
+
     def _masthead(self, parent, prefix):
         """Paper title block under the banner: eyebrow, Playfair date,
         hand note left; folio right."""
@@ -885,7 +897,7 @@ class MealApp(tk.Tk):
         self.month_grid.set_month(cells, today=now, ticks=ticks)
         self.month_title.configure(
             text=cur.strftime("%B %Y").upper())
-        self.mon_eb.configure(text=f"ALMANAC \u2014 {cur.strftime('%B').upper()}")
+        self._kicker("mon", "")
         self.mon_date.configure(text=cur.strftime("%B %Y"))
         logged = sum(1 for d, en, ex in cells if en > 0)
         self.mon_note.configure(
@@ -1146,8 +1158,7 @@ class MealApp(tk.Tk):
         over = a["over"] > 0
 
         # TODAY headings live on paper beneath the photo
-        self.today_eb.configure(
-            text=f"ENTRY \u2014 {now.strftime('%A').upper()}")
+        self._kicker("today", "")
         self.today_date.configure(text=now.strftime("%d %B %Y"))
         self.today_note.configure(
             text=(f"batch {batch} \u00b7 {a['remaining']:g} misses left"
@@ -1165,7 +1176,7 @@ class MealApp(tk.Tk):
                   + (f" \u2014 OVERDUE BY {a['over']:g}" if over else "")
                   + f"  \u00b7  Bill {rupees(b['total'])}"),
             fg=th.STAMP if over else th.INK_SOFT)
-        self.footer_right.configure(text="B / L / D TO LOG")
+        self.footer_right.configure(text="")
 
     def refresh_today(self):
         now = mc.today()
@@ -1241,8 +1252,7 @@ class MealApp(tk.Tk):
         log_bill, _ = mc.day_bill(log_e, self.log_date)
         _now = mc.today()
         _dno = (_now - mc.cycle_start(_now)).days + 1
-        self.logm_eb.configure(
-            text=f"LEAF \u2014 {self.log_date.strftime('%A').upper()}")
+        self._kicker("logm", "")
         self.logm_date.configure(text=self.log_date.strftime("%d %B %Y"))
         self.logm_note.configure(
             text=(f"{log_e['meals_counted']:g} meals \u00b7 "
@@ -1454,9 +1464,7 @@ class MealApp(tk.Tk):
         ce = mc.cycle_end(now)
         over = a["over"] > 0
         day_no = (now - cs).days + 1
-        self.ins_eb.configure(
-            text=(f"{cs.strftime('%B').upper()} CYCLE \u2014 "
-                  f"No. {cycle_edition(cs):02d}"))
+        self._kicker("ins", f"No. {cycle_edition(cs):02d}")
         self.ins_date.configure(
             text=(f"{cs.strftime('%d %b')} \u2013 "
                   f"{ce.strftime('%d %b')}"))

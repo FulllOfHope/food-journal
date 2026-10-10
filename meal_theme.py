@@ -52,7 +52,6 @@ MARGIN    = "#d69a86"   # red margin rule
 SPINE     = "#e8e2d4"   # bound edge strip
 STITCH    = "#b3a88f"   # stitching thread
 STAMP     = "#b3402e"   # rubber-stamp red
-VEG       = "#2e7d46"   # shakahari green, for the veg mark
 HONEY     = "#d9a441"   # part-days: some meals taken, not all
 RED       = "#b3402e"   # danger is stamped red, like everything urgent
 
@@ -70,7 +69,7 @@ TEXT_HI   = "#111111"
 TEXT_DIM  = INK_SOFT
 TEXT_MUTE = PENCIL
 GREEN     = STAMP       # single interface accent: the stamp pad
-GREEN_DK  = STAMP
+GREEN_DK  = STAMP       # one accent only: kept marks are ink, misses are red
 CYAN      = INK
 AMBER     = INK
 MAGENTA   = PENCIL
@@ -834,10 +833,10 @@ class MealBreakdown(tk.Canvas):
                                       outline=RULE_DK, width=1)
                 if k < kept:
                     self.create_line(bx + 3, y + box / 2, bx + box / 2,
-                                     y + box - 3, fill=VEG, width=1.8,
+                                     y + box - 3, fill=INK, width=1.8,
                                      capstyle="round")
                     self.create_line(bx + box / 2, y + box - 3,
-                                     bx + box - 3, y + 3, fill=VEG,
+                                     bx + box - 3, y + 3, fill=INK,
                                      width=1.8, capstyle="round")
                 else:
                     self.create_line(bx + 3, y + 3, bx + box - 3, y + box - 3,
@@ -930,10 +929,10 @@ class MonthGrid(tk.Canvas):
                                           outline=RULE_DK, width=1)
                     if got:
                         self.create_line(mx + 1, my + 3, mx + 3, my + 5,
-                                         fill=VEG, width=1.4,
+                                         fill=INK, width=1.4,
                                          capstyle="round")
                         self.create_line(mx + 3, my + 5, mx + 5, my + 1,
-                                         fill=VEG, width=1.4,
+                                         fill=INK, width=1.4,
                                          capstyle="round")
             self.create_rectangle(x, y, x + cw, y + ch, fill="",
                                   outline="", tags=f"m{i}")

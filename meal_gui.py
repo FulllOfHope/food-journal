@@ -744,10 +744,6 @@ class MealApp(tk.Tk):
                       lambda: self._set_all_today(True),
                       kind="primary").pack(side="right")
 
-        self.week = th.WeekStrip(parent, bg=th.PAPER,
-                                 on_pick=self._week_pick)
-        self.week.pack(fill="x", pady=(14, 0))
-
         # scrapbook void: pure empty paper for the doodles
         self.void = tk.Frame(parent, bg=th.PAPER)
         self.void._doodle_zone = True
@@ -789,24 +785,6 @@ class MealApp(tk.Tk):
         offered = sum(mc.meal_value(m, day) for m in mc.MEALS)
         return (f"{entry['meals_counted']:g} meals  /  {offered:g} offered"
                 f"  /  {rupees(bill)}")
-
-    def _week_pick(self, day):
-        """Click a stamp in the week strip to edit that day."""
-        self.log_date = day
-        self._show("LOG / EDIT")
-
-    def _week_data(self, now):
-        """This week Monday to Sunday, with meals eaten vs expected."""
-        start = now - timedelta(days=now.weekday())
-        out = []
-        for i in range(7):
-            day = start + timedelta(days=i)
-            e = mc.peek_day(day) if day <= now else {}
-            eaten = sum(mc.meal_value(m, day) for m in mc.MEALS
-                        if e and e.get(m))
-            expected = sum(mc.meal_value(m, day) for m in mc.MEALS)
-            out.append((day, eaten, expected, day > now))
-        return out
 
     def _set_all_today(self, value):
         now = mc.today()
@@ -1213,9 +1191,6 @@ class MealApp(tk.Tk):
         today_bill, _ = mc.day_bill(today_e, now)
         self.today_sum.configure(text=self._ledger_line(today_e, now,
                                                         today_bill))
-        cs = mc.cycle_start(now)
-        self.week.set_days(self._week_data(now), today=now)
-        self.week.set_progress((now - cs).days + 1, mc.cycle_days(now))
 
     def _scatter_view(self):
         """Keep the live view's doodles in free paper, evenly spaced.

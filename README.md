@@ -3,9 +3,9 @@
 A meal tracker styled as a bound paper journal. It nags you at login until
 the day's meals are logged.
 
-Four pages: **TODAY** (stamp the day, with a seven-day strip), **LOG / EDIT**
-(any single day), **MONTH** (a month almanac) and **INSIGHTS** (cycle stats,
-what actually gets skipped, and the bill).
+Four pages: **TODAY** (stamp the day), **LOG / EDIT** (any single day),
+**MONTH** (a month almanac) and **INSIGHTS** (cycle stats, what actually
+gets skipped, and the bill).
 
 ## Rules
 
@@ -51,9 +51,8 @@ home directories so an upgrade never loses data.
 | `?` | key sheet |
 | `Esc` | close a sheet |
 
-Click any stamp in the TODAY week strip, or any cell in the MONTH almanac,
-to jump straight to editing that day. Hovering a history row floats a card
-with that day's meals and bill.
+Click any cell in the MONTH almanac to jump straight to editing that day.
+Hovering a history row floats a card with that day's meals and bill.
 
 ## Your data
 

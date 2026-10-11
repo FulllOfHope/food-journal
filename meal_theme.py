@@ -943,121 +943,6 @@ class MonthGrid(tk.Canvas):
                           lambda e: self.configure(cursor=""))
 
 
-class WeekStrip(tk.Canvas):
-    """The last seven days as a row of little meal stamps, plus a ribbon
-    showing how far through the billing cycle the month is."""
-
-    BOX = 24
-    BOX_Y = 10          # top of the stamp boxes
-    LETTER_Y = 44       # weekday initial
-    DATE_Y = 55         # day number
-    RIBBON_Y = 64       # progress rule
-    RIBBON_TXT = 74     # progress caption
-    TOTAL_H = 84
-
-    def __init__(self, master, bg=PAPER, on_pick=None, height=None,
-                 **kw):
-        super().__init__(master, height=height or self.TOTAL_H, bg=bg,
-                         highlightthickness=0, bd=0, **kw)
-        self._days = []
-        self._today = None
-        self._progress = (0, 0)
-        self._on_pick = on_pick
-        self.bind("<Configure>", lambda e: self.redraw())
-
-    def set_days(self, days, today=None):
-        self._days = list(days)
-        self._today = today
-        self.redraw()
-
-    def set_progress(self, done, total):
-        self._progress = (done, total)
-        self.redraw()
-
-    def _pick(self, index):
-        if self._on_pick and index < len(self._days):
-            self._on_pick(self._days[index][0])
-
-    def redraw(self):
-        self.delete("all")
-        w = max(1, self.winfo_width())
-        days = self._days
-        if not days:
-            return
-        cw = w / float(len(days))
-        by0 = self.BOX_Y
-        for i, (d, eaten, expected, future) in enumerate(days):
-            cx = cw * i + cw / 2
-            box = self.BOX
-            hot = (self._today is not None and d == self._today)
-            if future:
-                self.create_rectangle(cx - box / 2, by0, cx + box / 2,
-                                      by0 + box, outline=RULE, width=1.5,
-                                      dash=(3, 3))
-                self.create_text(cx, by0 + box / 2, text="·",
-                                 fill=PENCIL_LT, font=body(14))
-            elif expected <= 0:
-                # Saturday dinner is closed: a quiet dot, never a miss
-                self.create_oval(cx - 3, by0 + box / 2 - 3, cx + 3,
-                                 by0 + box / 2 + 3, fill=RULE_DK, outline="")
-            elif eaten >= expected:
-                self.create_rectangle(cx - box / 2, by0, cx + box / 2,
-                                      by0 + box, fill=STAMP, outline=STAMP,
-                                      width=2)
-                self.create_line(cx - 7, by0 + box / 2, cx - 2,
-                                 by0 + box / 2 + 6, fill=CARD_HI, width=2.5,
-                                 capstyle="round")
-                self.create_line(cx - 2, by0 + box / 2 + 6, cx + 8,
-                                 by0 + box / 2 - 6, fill=CARD_HI, width=2.5,
-                                 capstyle="round")
-            elif eaten > 0:
-                self.create_rectangle(cx - box / 2, by0, cx + box / 2,
-                                      by0 + box, outline=STAMP, width=2,
-                                      dash=(4, 3))
-                self.create_rectangle(cx - box / 2, by0 + box * eaten /
-                                      expected, cx + box / 2, by0 + box,
-                                      fill=STAMP, outline="")
-            else:
-                self.create_rectangle(cx - box / 2, by0, cx + box / 2,
-                                      by0 + box, outline=RULE_DK, width=1.5,
-                                      dash=(4, 3))
-            self.create_text(cx, self.LETTER_Y, text=d.strftime("%a")[0],
-                             fill=INK if hot else PENCIL, font=mono(11))
-            self.create_text(cx, self.DATE_Y, text=d.strftime("%d"),
-                             fill=PENCIL_LT, font=mono(9))
-            if hot:
-                self.create_oval(cx - box / 2 - 5, by0 - 5, cx + box / 2 + 5,
-                                 by0 + box + 5, outline=INK, width=1.2)
-            self.create_rectangle(cw * i, 0, cw * (i + 1), self.DATE_Y + 6,
-                                  fill="", outline="", tags=f"hit{i}")
-            self.tag_bind(f"hit{i}", "<Button-1>",
-                          lambda e, k=i: self._pick(k))
-            self.tag_bind(f"hit{i}", "<Enter>",
-                          lambda e, k=i: self.configure(cursor="hand2"))
-            self.tag_bind(f"hit{i}", "<Leave>",
-                          lambda e: self.configure(cursor=""))
-
-        # a ruled scale: one tick per day of the cycle, filled to today
-        done, total = self._progress
-        done, total = int(done), max(1, int(total))
-        ry = self.RIBBON_Y + 4
-        step = w / float(total)
-        for i in range(total):
-            x = i * step
-            tall = (i % 7 == 0)
-            self.create_line(x, ry, x, ry - (9 if tall else 5),
-                             fill=STAMP if i < done else RULE_DK,
-                             width=1.6 if tall else 1.1)
-        self.create_line(0, ry + 3, w, ry + 3, fill=RULE, width=1)
-        self.create_text(0, self.RIBBON_TXT, text="CYCLE", anchor="w",
-                         fill=PENCIL, font=mono(9))
-        self.create_text(w / 2, self.RIBBON_TXT,
-                         text="click a day to edit", anchor="center",
-                         fill=RULE_DK, font=mono(9))
-        self.create_text(w, self.RIBBON_TXT, text=f"{done} of {total} days",
-                         anchor="e", fill=PENCIL, font=mono(9))
-
-
 class Doodle(tk.Canvas):
     """A bare hand-drawn veg doodle for the empty stretches: flat
     storybook fills with depth, no box, no words. Static art."""
@@ -1274,11 +1159,12 @@ class Doodle(tk.Canvas):
 
 # ------------------------------------------------------- pencil marks
 class AllowanceBox(tk.Canvas):
-    """Miss allowance gauge: one ruled cell per miss, struck
-    through with hand X marks (half misses get a single slash). Overflow
-    past the allowance is stamped red."""
+    """Miss allowance ruled out in full: one cell per allowed miss, the
+    used ones struck through by hand.
 
-    COMPACT_H = 30
+    The whole grid is always drawn. A compact one-row summary was tried
+    and rejected - the cells are the point, and hiding them behind a
+    hover made the gauge unreadable at rest."""
 
     def __init__(self, master, cell=15, gap=5, per_row=25, bg=PAPER, **kw):
         super().__init__(master, bg=bg, highlightthickness=0, bd=0, **kw)
@@ -1286,77 +1172,12 @@ class AllowanceBox(tk.Canvas):
         self._bg = bg
         self._used = 0.0
         self._allowed = 25
-        self.configure(height=self.COMPACT_H)
-        self._drawn_w = 0
-        self.bind("<Enter>", lambda e: self.redraw())
-        self.bind("<Leave>", lambda e: self.draw_compact())
-        # the compact row is drawn from the live width, so it has to be
-        # rebuilt once the widget actually has a size
-        self.bind("<Configure>", self._on_size)
-
-    def _on_size(self, _e=None):
-        w = self.winfo_width()
-        if abs(w - self._drawn_w) < 8:
-            return
-        self._drawn_w = w
-        if self._hovered():
-            self.redraw()
-        else:
-            self.draw_compact()
+        self.bind("<Configure>", lambda e: self.redraw())
 
     def set_value(self, used, allowed=25):
         self._used = max(0.0, float(used))
         self._allowed = max(1, int(round(allowed)))
-        if self.winfo_ismapped() and self._hovered():
-            self.redraw()
-        else:
-            self.draw_compact()
-
-    def _hovered(self):
-        try:
-            x, y = self.winfo_pointerxy()
-            return (self.winfo_rootx() <= x <= self.winfo_rootx()
-                    + self.winfo_width()
-                    and self.winfo_rooty() <= y <= self.winfo_rooty()
-                    + self.winfo_height())
-        except Exception:
-            return False
-
-    def draw_compact(self):
-        """A single row of ruled cells instead of 25 boxes.
-
-        The count already sits on the line above, so this stays quiet:
-        just the marks, and the pointer turns them into the full grid."""
-        self.delete("all")
-        w = self.winfo_width()
-        if w < 40:
-            return
-        self._drawn_w = w
-        self.configure(height=self.COMPACT_H)
-        full = int(self._used)
-        half = 1 if self._used - full >= 0.5 else 0
-        shown = min(self._allowed, full + half)
-        box, gap = 11, 3
-        per = max(1, (w - 8) // (box + gap))
-        x = 4
-        for i in range(min(shown, per)):
-            over = i >= self._allowed
-            col = RED if over else INK
-            self.create_rectangle(x, 9, x + box, 9 + box, outline=RULE_DK,
-                                  width=1)
-            if i < full:
-                self.create_line(x + 2, 11, x + box - 2, 9 + box - 2,
-                                 fill=col, width=1.5)
-                self.create_line(x + 2, 9 + box - 2, x + box - 2, 11,
-                                 fill=col, width=1.5)
-            elif i == full and half:
-                self.create_line(x + 2, 9 + box - 2, x + box - 2, 11,
-                                 fill=col, width=1.5)
-            x += box + gap
-        if full + half > per:
-            self.create_text(x + 6, 9 + box / 2,
-                             text=f"+{full + half - per} more", anchor="w",
-                             fill=RED, font=mono(9))
+        self.redraw()
 
     def redraw(self):
         self.delete("all")
@@ -1366,14 +1187,17 @@ class AllowanceBox(tk.Canvas):
         rows = max(1, math.ceil(cells / self._row))
         step = self._cell + self._gap
         self.configure(height=rows * step + 4)
+        w = max(1, self.winfo_width())
+        # shrink the cells to fit the measure rather than clipping the
+        # tail of the grid off the right edge
+        per = max(1, min(self._row, int((w - 4) // step)))
         for i in range(cells):
-            r, c = divmod(i, self._row)
+            r, c = divmod(i, per)
             x0 = c * step + 2
             y0 = r * step + 2
             x1, y1 = x0 + self._cell, y0 + self._cell
             over = i >= self._allowed
-            self.create_rectangle(x0, y0, x1, y1, outline=RULE_DK,
-                                  width=1)
+            self.create_rectangle(x0, y0, x1, y1, outline=RULE_DK, width=1)
             if i < full:
                 col = RED if over else INK
                 self.create_line(x0 + 3, y0 + 3, x1 - 3, y1 - 3, fill=col,

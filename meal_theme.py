@@ -378,7 +378,7 @@ PAPER_RGB = (244, 241, 234)
 
 
 _CACHE_DIR = Path.home() / ".cache" / "mess-ledger" / "art"
-_ART_VERSION = 7  # bump whenever the art pipeline changes
+_ART_VERSION = 8  # bump whenever the art pipeline changes
 
 
 def _cache_path(key):
@@ -426,26 +426,27 @@ def cover_fit(img, w, h, anchor=0.5):
     return img.crop((x, y, x + w, y + h))
 
 
-def deckle(img, top=11, bottom=15, seed=7):
+def deckle(img, top=6, bottom=8, seed=7):
     """Tear the top and bottom edges so a band reads as a pasted strip.
 
-    The edge is a couple of slow waves plus a fine fibre jitter, so it
-    undulates like paper instead of combing into a sawtooth. Deterministic
-    per column, so the tear never shimmers between redraws."""
+    Three slow waves at coprime periods give an organic wobble. The
+    earlier version added a per-column hash for fibre texture, but on a
+    band this short it read as static, not paper, so the randomness is
+    gone and the tear is carried by shape alone."""
     w, h = img.size
     out = img.convert("RGBA")
     alpha = Image.new("L", (w, h), 255)
     px = alpha.load()
+    k = seed * 0.9
 
-    def wave(x, k):
-        r = (x * 2654435761 + (seed + k) * 40503) & 0xFFFF
-        return (math.sin(x / (43.0 + 11 * k) + (r % 628) / 100.0) * 3.4
-                + math.sin(x / (15.0 + 7 * k) + ((r >> 6) % 628) / 100.0) * 1.7
-                + ((r >> 11) % 100) / 100.0 * 1.6)
+    def wave(x, n):
+        return (math.sin(x / 61.0 + n + k) * 2.6
+                + math.sin(x / 27.0 + n * 1.7 + k) * 1.5
+                + math.sin(x / 13.0 + n * 2.3 + k) * 0.7)
 
     for x in range(w):
-        t = top + wave(x, 0)
-        b = h - bottom - wave(x, 1)
+        t = top + wave(x, 0.0)
+        b = h - bottom - wave(x, 2.4)
         for y in range(0, max(0, min(h, int(t)))):
             px[x, y] = 0
         for y in range(max(0, min(h, int(b))), h):
@@ -456,8 +457,15 @@ def deckle(img, top=11, bottom=15, seed=7):
 
 def band_fit(img, w, h, anchor=0.45, tear=True):
     """Fill a wide, short band with one photo, cropped rather than
-    squashed, so the artwork keeps its proportions edge to edge."""
+    squashed, so the artwork keeps its proportions edge to edge.
+
+    The source is portrait and the band is wide and short, so it is
+    always upscaled and loses apparent bite. A light unsharp pass puts
+    the edges back after the resize rather than leaving a soft wash."""
     band = cover_fit(img, w, h, anchor)
+    if band.width > img.width:
+        band = band.filter(ImageFilter.UnsharpMask(radius=1.8, percent=125,
+                                                  threshold=3))
     return deckle(band) if tear else band
 
 

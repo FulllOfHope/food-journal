@@ -53,6 +53,16 @@ SPINE     = "#e8e2d4"   # bound edge strip
 STITCH    = "#b3a88f"   # stitching thread
 STAMP     = "#b3402e"   # rubber-stamp red
 HONEY     = "#d9a441"   # part-days: some meals taken, not all
+BARK_DK   = "#6b4a2f"   # trunk
+FRUIT     = "#c96a24"   # ripe tangerine
+FRUIT_DK  = "#96501c"
+FRUIT_HI  = "#f2c078"
+LEAF_FILL = "#5a7a2a"
+LEAF_DK   = "#42591d"
+PETAL     = "#fbf7ec"   # the cream used inside stamps and petals
+SKY       = "#c3dcee"
+SKY_DK    = "#8ab4d2"
+SPARK     = "#d9a441"
 RED       = "#b3402e"   # danger is stamped red, like everything urgent
 
 # legacy aliases kept so untouched call-sites keep working
@@ -943,6 +953,111 @@ class MonthGrid(tk.Canvas):
                           lambda e: self.configure(cursor=""))
 
 
+class TangerineTree(tk.Canvas):
+    """A tangerine tree that fruits as the cycle fills up.
+
+    Drawn from `progress`, the share of this cycle's meals actually
+    eaten, so it is a record rather than ornament: a bare seed on day
+    one, blossom by the middle, laden by the end. Deterministic, so the
+    same day always grows the same tree."""
+
+    def __init__(self, master, width=150, height=250, bg=PAPER, **kw):
+        super().__init__(master, width=width, height=height, bg=bg,
+                         highlightthickness=0, bd=0, **kw)
+        self._p = 0.0
+        self.bind("<Configure>", lambda e: self.redraw())
+
+    def set_progress(self, progress):
+        self._p = max(0.0, min(1.0, float(progress)))
+        self.redraw()
+
+    # a fixed scatter of leaf and fruit anchors, so the canopy fills in
+    # from the trunk outwards instead of scrambling as it grows
+    LEAVES = ((-30, -128), (-6, -150), (22, -132), (-40, -104), (40, -108),
+              (-16, -112), (10, -118), (-48, -78), (46, -82), (-24, -86),
+              (8, -92), (34, -64), (-38, -52), (40, -54), (-8, -58),
+              (14, -40), (-26, -26), (24, -28))
+    FRUIT = ((-34, -118), (26, -120), (-44, -90), (42, -94), (-2, -96),
+             (36, -66), (-40, -60), (4, -44), (-20, -34), (22, -50),
+             (-10, -70), (14, -84))
+
+    def redraw(self):
+        self.delete("all")
+        p = self._p
+        w = max(1, self.winfo_width())
+        h = max(1, self.winfo_height())
+        cx = w / 2.0
+        base = h - 30          # leave a line for the caption underneath
+
+        # soil: a ruled line of earth with a few pressed specks
+        self.create_line(cx - 34, base, cx + 34, base, fill=BARK_DK, width=2)
+        for dx in (-24, -8, 10, 26):
+            self.create_oval(cx + dx - 2, base - 2, cx + dx + 2, base + 2,
+                             fill="#8a6a4a", outline="")
+
+        if p <= 0.001:
+            # day one: a seed, and the promise of the thing
+            self.create_oval(cx - 4, base - 7, cx + 4, base - 1,
+                             fill="#6b4a2f", outline="")
+            self.create_text(cx, base + 16, text="a seed", anchor="center",
+                             fill=PENCIL, font=mono(9))
+            return
+            return
+
+        # trunk: short and thick at first, tall and tapered later
+        top = base - (34 + 96 * p)
+        lean = -6 + 14 * p
+        self.create_line(cx, base, cx + lean, top, fill=BARK_DK,
+                         width=7 if p < 0.5 else 5, capstyle="round")
+        # one limb for each step of growth
+        for i in range(1, 4):
+            if p < i / 3.4:
+                break
+            f = i / 3.0
+            by = top + (base - top) * (1 - f) * 0.7
+            for side in (-1, 1):
+                self.create_line(cx + lean * (1 - (1 - f) * 0.7), by,
+                                 cx + lean + side * (10 + 12 * f), by - 9 * f,
+                                 fill="#6b4a2f", width=3 - f, capstyle="round")
+
+        # leaves fill the canopy outward, largest first
+        n_leaf = max(1, int(round(len(self.LEAVES) * min(1.0, p * 1.12))))
+        for i, (dx, dy) in enumerate(self.LEAVES[:n_leaf]):
+            lx, ly = cx + dx, top + (dy + 150) * (0.55 + 0.45 * p)
+            r = 7 + 3 * p
+            self.create_oval(lx - r, ly - r * 0.7, lx + r, ly + r * 0.7,
+                             fill=LEAF_FILL, outline=LEAF_DK, width=1.2)
+
+        # fruit only once there is a canopy able to carry it
+        n_fruit = int(round(len(self.FRUIT) * max(0.0, (p - 0.2) / 0.8)))
+        for dx, dy in self.FRUIT[:n_fruit]:
+            fx, fy = cx + dx, top + (dy + 150) * (0.55 + 0.45 * p)
+            self.create_oval(fx - 6, fy - 6, fx + 6, fy + 6,
+                             fill=FRUIT, outline=FRUIT_DK, width=1.4)
+            self.create_oval(fx - 3, fy - 4, fx - 1, fy - 2, fill=FRUIT_HI,
+                             outline="")
+        if n_fruit:
+            self.create_text(cx, base + 16,
+                             text=f"{n_fruit} of {len(self.FRUIT)} ripe",
+                             anchor="center", fill=PENCIL, font=mono(9))
+        else:
+            self.create_text(cx, base + 16, text="growing", anchor="center",
+                             fill=PENCIL, font=mono(9))
+
+        # a blossom appears once, mid-cycle, and is the reward for the
+        # habit rather than for the number
+        if 0.35 <= p < 0.75:
+            bx, by = cx + 30, top + 6
+            for a in range(0, 360, 72):
+                import math as _m
+                r = _m.radians(a)
+                self.create_oval(bx + 4 * _m.cos(r) - 3,
+                                 by + 4 * _m.sin(r) - 3,
+                                 bx + 4 * _m.cos(r) + 3,
+                                 by + 4 * _m.sin(r) + 3,
+                                 fill="#fbf7ec", outline=HONEY, width=1)
+
+
 class Doodle(tk.Canvas):
     """A bare hand-drawn veg doodle for the empty stretches: flat
     storybook fills with depth, no box, no words. Static art."""
@@ -953,7 +1068,6 @@ class Doodle(tk.Canvas):
     LEAF = "#5a7a2a"
     LEAF_DK = "#42591d"
     BARK = "#6b4a2f"
-    SPARK = "#d9a441"
     GRAIN = "#d9a441"
     GRAIN_DK = "#8a6a25"
     LEMON = "#e6c33c"
@@ -989,7 +1103,11 @@ class Doodle(tk.Canvas):
          "heart": self._heart,
          "bow": self._bow,
          "tape": self._tape,
-         "stamp": self._stamp}.get(doodle, self._tangerine)(cx, cy)
+         "stamp": self._stamp,
+         "postmark": self._postmark,
+         "airmail": self._airmail,
+         "passport": self._passport,
+         "compass": self._compass}.get(doodle, self._tangerine)(cx, cy)
 
     def _tangerine(self, x, y):
         self.create_oval(x - 16, y - 15, x + 16, y + 15, fill=self.FRUIT,
@@ -1025,11 +1143,11 @@ class Doodle(tk.Canvas):
 
     def _star(self, x, y):
         r = 15
-        self.create_line(x - r, y, x + r, y, fill=self.SPARK, width=2.5)
-        self.create_line(x, y - r, x, y + r, fill=self.SPARK, width=2.5)
+        self.create_line(x - r, y, x + r, y, fill=SPARK, width=2.5)
+        self.create_line(x, y - r, x, y + r, fill=SPARK, width=2.5)
         self.create_polygon([(x, y - r * 0.55), (x + r * 0.2, y),
                              (x, y + r * 0.55), (x - r * 0.2, y)],
-                            fill=self.SPARK, outline="")
+                            fill=SPARK, outline="")
 
     def _leaf(self, x, y):
         self.create_polygon([(x, y - 20), (x + 13, y - 2), (x + 4, y + 18),
@@ -1071,7 +1189,7 @@ class Doodle(tk.Canvas):
     def _daisy(self, x, y):
         for dx, dy in ((0, -13), (11, -4), (7, 10), (-7, 10), (-11, -4)):
             self.create_oval(x + dx - 7, y + dy - 7, x + dx + 7, y + dy + 7,
-                             fill=self.PETAL, outline=self.SKY_DK,
+                             fill=PETAL, outline=SKY_DK,
                              width=1.6)
         self.create_oval(x - 7, y - 7, x + 7, y + 7, fill=self.POLLEN,
                          outline="")
@@ -1079,7 +1197,7 @@ class Doodle(tk.Canvas):
     def _butterfly(self, x, y):
         for sgn in (1, -1):
             self.create_oval(x + sgn * 5 - 10, y - 15, x + sgn * 5 + 10,
-                             y - 1, fill=self.SPARK, outline=self.FRUIT_DK,
+                             y - 1, fill=SPARK, outline=self.FRUIT_DK,
                              width=1.8)
             self.create_oval(x + sgn * 5 - 8, y - 1, x + sgn * 5 + 8, y + 14,
                              fill=self.FRUIT_HI, outline=self.FRUIT_DK,
@@ -1089,23 +1207,23 @@ class Doodle(tk.Canvas):
         self.create_line(x, y - 12, x + 6, y - 21, fill=self.BARK, width=1.6)
 
     def _bee(self, x, y):
-        self.create_oval(x - 13, y - 12, x + 12, y + 12, fill=self.SPARK,
+        self.create_oval(x - 13, y - 12, x + 12, y + 12, fill=SPARK,
                          outline=self.FRUIT_DK, width=2)
         for dx in (-4, 4):
             self.create_line(x + dx - 3, y - 10, x + dx - 3, y + 10,
                              fill=self.BARK, width=2.5)
-        self.create_oval(x + 12, y - 10, x + 24, y + 1, fill=self.SKY,
-                         outline=self.SKY_DK, width=1.6)
+        self.create_oval(x + 12, y - 10, x + 24, y + 1, fill=SKY,
+                         outline=SKY_DK, width=1.6)
         self.create_line(x - 13, y, x - 21, y - 5, fill=self.BARK, width=2)
 
     def _cloud(self, x, y):
-        self.create_oval(x - 24, y - 4, x - 4, y + 12, fill=self.PETAL,
-                         outline=self.SKY_DK, width=2)
-        self.create_oval(x - 10, y - 13, x + 12, y + 10, fill=self.PETAL,
-                         outline=self.SKY_DK, width=2)
-        self.create_oval(x + 4, y - 2, x + 24, y + 12, fill=self.PETAL,
-                         outline=self.SKY_DK, width=2)
-        self.create_line(x - 20, y + 11, x + 20, y + 11, fill=self.SKY_DK,
+        self.create_oval(x - 24, y - 4, x - 4, y + 12, fill=PETAL,
+                         outline=SKY_DK, width=2)
+        self.create_oval(x - 10, y - 13, x + 12, y + 10, fill=PETAL,
+                         outline=SKY_DK, width=2)
+        self.create_oval(x + 4, y - 2, x + 24, y + 12, fill=PETAL,
+                         outline=SKY_DK, width=2)
+        self.create_line(x - 20, y + 11, x + 20, y + 11, fill=SKY_DK,
                          width=2)
 
     def _sun(self, x, y):
@@ -1114,8 +1232,8 @@ class Doodle(tk.Canvas):
             r = _m.radians(a)
             self.create_line(x + 15 * _m.cos(r), y + 15 * _m.sin(r),
                              x + 23 * _m.cos(r), y + 23 * _m.sin(r),
-                             fill=self.SPARK, width=2.5)
-        self.create_oval(x - 13, y - 13, x + 13, y + 13, fill=self.SPARK,
+                             fill=SPARK, width=2.5)
+        self.create_oval(x - 13, y - 13, x + 13, y + 13, fill=SPARK,
                          outline=self.GRAIN_DK, width=2)
 
     def _bird(self, x, y):
@@ -1150,11 +1268,63 @@ class Doodle(tk.Canvas):
 
     def _stamp(self, x, y):
         self.create_rectangle(x - 17, y - 17, x + 17, y + 17,
-                              fill=self.PETAL, outline=RULE_DK,
+                              fill=PETAL, outline=RULE_DK,
                               width=2, dash=(3, 3))
         self.create_oval(x - 9, y - 6, x + 9, y + 11, fill=self.FRUIT,
                          outline=self.FRUIT_DK, width=1.8)
         self.create_line(x, y - 6, x + 3, y - 13, fill=self.LEAF, width=1.8)
+
+
+    def _postmark(self, x, y):
+        """Postal cancellation: a ring of dashes with waves through it."""
+        import math as _m
+        for a in range(0, 360, 24):
+            r0, r1 = _m.radians(a), _m.radians(a + 13)
+            self.create_line(x + 20 * _m.cos(r0), y + 20 * _m.sin(r0),
+                             x + 20 * _m.cos(r1), y + 20 * _m.sin(r1),
+                             fill=self.FRUIT_DK, width=2)
+        for dy in (-5, 0, 5):
+            self.create_line(x - 26, y + dy, x + 26, y + dy,
+                             fill=INK_SOFT, width=1.6)
+
+    def _airmail(self, x, y):
+        """The red-and-blue edged tag every parcel travels in."""
+        self.create_rectangle(x - 26, y - 12, x + 26, y + 12,
+                              fill=PETAL, outline=INK_SOFT,
+                              width=1.4)
+        self.create_rectangle(x - 26, y - 12, x - 19, y + 12,
+                              fill=STAMP, outline="")
+        self.create_rectangle(x + 19, y - 12, x + 26, y + 12,
+                              fill="#3d5a80", outline="")
+        self.create_line(x - 13, y - 5, x + 13, y + 5, fill=PENCIL,
+                         width=1.4)
+        self.create_line(x - 13, y + 5, x + 13, y - 5, fill=PENCIL,
+                         width=1.4)
+
+    def _passport(self, x, y):
+        """A travel stamp: peak and sun inside a perforation."""
+        self.create_rectangle(x - 17, y - 17, x + 17, y + 17,
+                              fill=PETAL, outline=RULE_DK,
+                              width=1.6, dash=(3, 3))
+        self.create_polygon([(x - 12, y + 9), (x - 3, y - 7), (x + 5, y + 9)],
+                            fill=SKY, outline=SKY_DK, width=1.2)
+        self.create_oval(x + 6, y - 11, x + 13, y - 4, fill=SPARK,
+                         outline="")
+
+    def _compass(self, x, y):
+        """A hand-drawn rose, the way a scrapbook marks a direction."""
+        import math as _m
+        self.create_oval(x - 18, y - 18, x + 18, y + 18,
+                         outline=INK_SOFT, width=1.6)
+        self.create_line(x, y - 13, x, y + 13, fill=INK_SOFT, width=1.4)
+        self.create_line(x - 13, y, x + 13, y, fill=INK_SOFT, width=1.4)
+        for a, col in ((45, self.FRUIT), (225, SKY_DK)):
+            r = _m.radians(a)
+            self.create_polygon([(x + 14 * _m.cos(r), y + 14 * _m.sin(r)),
+                                 (x - 5 * _m.cos(r), y - 5 * _m.sin(r)),
+                                 (x - 5 * _m.sin(r), y + 5 * _m.cos(r)),
+                                 (x + 14 * _m.sin(r), y - 14 * _m.cos(r))],
+                                fill=col, outline="")
 
 
 # ------------------------------------------------------- pencil marks

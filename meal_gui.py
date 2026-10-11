@@ -224,7 +224,8 @@ def _parse_date(raw):
 
 DOODLE_KINDS = ["tangerine", "lemon", "slice", "sprig", "wheat", "leaf",
                 "chili", "star", "daisy", "butterfly", "bee", "cloud",
-                "sun", "bird", "heart", "bow", "tape", "stamp"]
+                "sun", "bird", "heart", "bow", "tape", "stamp",
+                "postmark", "airmail", "passport", "compass"]
 
 
 def _overlaps(a, b, pad=0):
@@ -748,6 +749,10 @@ class MealApp(tk.Tk):
         self.void = tk.Frame(parent, bg=th.PAPER)
         self.void._doodle_zone = True
         self.void.pack(fill="both", expand=True, pady=(14, 0))
+        # a tree at the left edge: it fruits as the cycle fills up
+        self.tree = th.TangerineTree(self.void, width=158, height=252,
+                                      bg=th.PAPER)
+        self.tree.place(relx=0.0, rely=1.0, anchor="sw", x=8, y=-4)
 
     def _do_export(self):
         """Write the whole ledger to ~/Documents/MessLedger."""
@@ -785,6 +790,23 @@ class MealApp(tk.Tk):
         offered = sum(mc.meal_value(m, day) for m in mc.MEALS)
         return (f"{entry['meals_counted']:g} meals  /  {offered:g} offered"
                 f"  /  {rupees(bill)}")
+
+    def _cycle_eaten(self, cs, now):
+        """Share of this cycle's offered meals actually eaten.
+
+        Same rules the bill uses, read straight from the history, so the
+        tree can never disagree with the numbers on the page."""
+        eaten = expected = 0.0
+        end = min(mc.cycle_end(now), now)
+        if end < cs:
+            return 0.0
+        for day, e in mc.entries_between(cs, end):
+            for m in mc.MEALS:
+                worth = mc.meal_value(m, day)
+                expected += worth
+                if e and e.get(m):
+                    eaten += worth
+        return (eaten / expected) if expected else 0.0
 
     def _set_all_today(self, value):
         now = mc.today()

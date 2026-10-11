@@ -143,6 +143,7 @@ __CARDS__
 <p class="foot">Same journal as the desktop app, over your own Wi-Fi.
 Add to your home screen to run it as an app.</p>
 </div>
+<script>window.__STATE__ = __STATE_JSON__;</script>
 <script>
 const DATE = "__DATE__";
 const LS = "ml_state_v1", LQ = "ml_queue_v1";
@@ -153,13 +154,68 @@ const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; 
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); }
                          catch (e) {} };
 
-// Every tap is recorded here first and only then sent. The queue lives
-// in localStorage, so it survives the tab being closed, the phone
-// sleeping, or the laptop being switched off for days.
-function queueDelta(date, meal, value) {
+// --- the mirror -------------------------------------------------------
+// The phone keeps its own copy of every day, so it works with the
+// laptop switched off and knows what it already knows.
+let state = load(LS, null) || window.__STATE__ || null;
+if (window.__STATE__) { save(LS, window.__STATE__); }
+let lastSeen = load(LS + "_at", 0);
+let checkedAt = 0;
+
+function entryFor(date) {
+  return (state && state.history && state.history[date]) || null;
+}
+
+function mealsOf(date) {
+  const e = entryFor(date);
+  return { breakfast: !!(e && e.breakfast), lunch: !!(e && e.lunch),
+           dinner: !!(e && e.dinner) };
+}
+
+// Saturday dinner is closed. That one fact is cheap to restate, and the
+// phone must not offer a meal the kitchen is not serving.
+function closed(meal) {
+  const d = new Date(DATE + "T00:00:00");
+  return meal === "dinner" && d.getDay() === 6;
+}
+
+function render() {
+  if (!state) return;          // nothing mirrored yet: trust the server's own markup
+  const m = mealsOf(DATE);
+  document.querySelectorAll("form[data-meal]").forEach(form => {
+    const meal = form.dataset.meal;
+    const btn = form.querySelector("button");
+    btn.classList.toggle("eaten", m[meal]);
+    btn.disabled = closed(meal);
+  });
+}
+
+function ago(t) {
+  if (!t) return "";
+  const s = Math.round((Date.now() - t) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.round(s / 60) + " min ago";
+  return Math.round(s / 3600) + " h ago";
+}
+
+function paintSync() {
+  const n = load(LQ, []).length, el = $("sync");
+  el.classList.toggle("pending", n > 0);
+  let msg;
+  if (n) msg = n + (n === 1 ? " meal waiting to sync" : " meals waiting to sync");
+  else if (!navigator.onLine)
+    msg = lastSeen ? "offline - last synced " + ago(lastSeen) : "offline";
+  else if (!checkedAt) msg = "checking with your laptop";
+  else msg = "in sync - checked " + ago(checkedAt);
+  $("synctxt").textContent = msg;
+}
+
+// --- push: your taps --------------------------------------------------
+function queueDelta(meal, value) {
   const q = load(LQ, []);
-  q.push({ d: date, m: meal, v: value ? 1 : 0, t: Date.now() });
+  q.push({ d: DATE, m: meal, v: value ? 1 : 0, t: Date.now() });
   save(LQ, q);
+  render();
   paintSync();
   flush();
 }
@@ -167,53 +223,63 @@ function queueDelta(date, meal, value) {
 let sending = false;
 async function flush() {
   const q = load(LQ, []);
-  if (!q.length || sending) return;
-  if (!navigator.onLine) return;
+  if (!q.length || sending || !navigator.onLine) return;
   sending = true; paintSync();
   try {
     const r = await fetch("/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ deltas: q })
     });
     if (!r.ok) throw new Error("sync failed");
     const out = await r.json();
-    save(LS, out.state);
-    save(LQ, []);                 // only cleared once the laptop confirms
-    document.querySelectorAll(".saving").forEach(e => e.classList.remove("saving"));
+    adopt(out.state);
+    save(LQ, []);                 // cleared only once the laptop confirms
   } catch (e) {
     /* laptop unreachable: the queue stays put and goes again later */
-  } finally {
-    sending = false;
-    paintSync();
-  }
+  } finally { sending = false; paintSync(); }
 }
 
-function paintSync() {
-  const n = load(LQ, []).length, el = $("sync");
-  el.classList.toggle("pending", n > 0);
-  $("synctxt").textContent = n
-    ? n + (n === 1 ? " meal waiting to sync" : " meals waiting to sync")
-    : "in sync with your laptop";
+// --- pull: what the laptop has ---------------------------------------
+// Runs whether or not anything is queued, so a meal logged on the
+// laptop still reaches the phone on its own.
+async function pull() {
+  if (sending || !navigator.onLine) return;
+  sending = true;
+  try {
+    const r = await fetch("/state");
+    if (r.ok) adopt((await r.json()));
+  } catch (e) { /* offline */ }
+  finally { sending = false; checkedAt = Date.now(); paintSync(); }
 }
 
-document.querySelectorAll("form").forEach(form => {
+function adopt(next) {
+  if (!next || !next.history) return;
+  const before = entryFor(DATE);
+  const after = next.history[DATE];
+  const changed = JSON.stringify(before || null) !==
+                  JSON.stringify(after || null);
+  state = next;
+  lastSeen = checkedAt = Date.now();
+  save(LS, next);
+  if (changed) render();
+  paintSync();
+}
+
+document.querySelectorAll("form[data-meal]").forEach(form => {
   form.addEventListener("submit", ev => {
     ev.preventDefault();
-    const btn = form.querySelector("button");
     const meal = form.dataset.meal;
-    const on = !btn.classList.contains("eaten");
-    btn.classList.toggle("eaten", on);
-    btn.classList.add("saving");
-    queueDelta(DATE, meal, on);
+    const btn = form.querySelector("button");
+    queueDelta(meal, !btn.classList.contains("eaten"));
   });
 });
 
-addEventListener("online", flush);
-addEventListener("visibilitychange", () => { if (!document.hidden) flush(); });
-setInterval(flush, 20000);
-paintSync();
-flush();
+addEventListener("online", () => { flush(); pull(); });
+addEventListener("visibilitychange", () => {
+  if (!document.hidden) { flush(); pull(); }
+});
+setInterval(() => { flush(); pull(); }, 15000);
+render(); paintSync(); flush(); pull();
 </script>
 </body></html>"""
 
@@ -289,6 +355,11 @@ def rupees(v):
     return f"\u20b9{v:,.2f}"
 
 
+def _state_payload(now):
+    """The whole ledger, for the phone to keep its own copy of."""
+    return {"now": now.isoformat(), "history": mc.load_history()}
+
+
 def render():
     now = mc.today()
     e = mc.peek_day(now)
@@ -329,7 +400,8 @@ def render():
                             f"{offered:g} offered &middot; {rupees(bill)}"),
             ("__CARDS__", "\n".join(cards)),
             ("__STATS__", stats),
-            ("__BILL__", f"Cycle bill {rupees(cycle['total'])}")):
+            ("__BILL__", f"Cycle bill {rupees(cycle['total'])}"),
+            ("__STATE_JSON__", json.dumps(_state_payload(now)))):
         page = page.replace(token, value)
     return page
 
@@ -393,7 +465,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(render())
 
     def _state_json(self):
-        return {"now": mc.today().isoformat(), "history": mc.load_history()}
+        return _state_payload(mc.today())
 
     def _apply_deltas(self, deltas):
         """Replay queued edits from the phone, oldest first.

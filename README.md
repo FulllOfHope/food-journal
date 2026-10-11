@@ -183,6 +183,36 @@ Leave that terminal open.
 
 Find your IP with `ip addr` (Linux) or `ipconfig getifaddr en0` (macOS).
 
+### Using the phone away from home
+
+The link above only works on your home network, because `192.168.x.x`
+means nothing out in the world. **Tailscale** fixes that without putting
+anything on the internet: your laptop and phone join a private network,
+and the phone reaches the laptop through it as if you were both at home.
+
+Free for personal use, and the server is still yours.
+
+**On the laptop**
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+mess-ledger phone          # now prints a 100.x.y.z address too
+```
+
+**On the phone** — install Tailscale from the App Store or Play Store and
+sign in with the same account. No `tailscale up` needed.
+
+Open the `100.x` link, add to home screen as before, done. Works on
+mobile data, on a café Wi-Fi, anywhere.
+
+To stop: `sudo tailscale down`. Nothing is exposed while it's off.
+
+**If you'd rather not install anything** — a phone on mobile data simply
+can't reach a home LAN address. That is a limit of how the internet
+works, not a bug. The phone is still useful at home, and anything
+logged there syncs.
+
 ### Keep it private
 
 The server listens on your network, not the internet. But anyone with
@@ -251,12 +281,49 @@ photo. Any `art/*.jpg` is also picked up as a possible sticker.
 
 ```text
 ~/.local/share/bhu_meal_tracker/history.json   everything you've logged
+~/.local/share/bhu_meal_tracker/backups/       a rotated copy, one per day
 ~/.config/bhu_meal_tracker/config.ini          your settings
 ~/.cache/mess-ledger/art/                      generated artwork (safe to delete)
 ```
 
 Hand-edit `history.json` and the app reads it on next start. Back it up
 by copying it. Nothing is stored anywhere else.
+
+### Backups
+
+The app keeps a copy of your journal **once a day, automatically**, in
+`backups/`, and keeps 400 days of them. That is the only thing standing
+between a bad write and a year of meals, and it stays on the machine.
+
+To take one by hand:
+
+```bash
+mess-ledger backup
+```
+
+Or **Back up now** in the tray menu.
+
+To restore, copy a file from `backups/` over `history.json`. It's plain
+JSON — readable, and older copies are always there.
+
+### Keeping a copy elsewhere
+
+The backups are on the same disk, so they don't survive losing it. If
+you want a copy off the machine, any of these is a couple of commands:
+
+```bash
+# a USB stick, whenever you plug it in
+rsync -av ~/.local/share/bhu_meal_tracker/ /media/$USER/STICK/
+
+# private cloud, encrypted at rest by the provider
+rclone sync ~/.local/share/bhu_meal_tracker/backups/ gdrive:mess-ledger
+
+# git, which is already there, one file per day
+cd ~/.local/share/bhu_meal_tracker/backups && git init && git remote add origin ...
+```
+
+Copying it by hand to a USB stick once a month is a perfectly good
+answer, too.
 
 To move to another machine: copy that file across.
 

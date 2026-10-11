@@ -7,6 +7,7 @@ from calendar import monthrange
 from datetime import datetime, timedelta
 from pathlib import Path
 import tempfile
+import time
 import os
 
 APP_NAME = "bhu_meal_tracker"
@@ -218,6 +219,42 @@ def load_history():
     except Exception:
         return {}
 
+_last_backup = 0.0
+BACKUP_DIR = DATA_DIR / "backups"
+KEEP_BACKUPS = 400
+
+
+def backup_history(h=None):
+    """Keep a rotating copy of the journal.
+
+    One file per day, so the cost is bounded and the most recent day
+    survives whatever went wrong today. This is the only thing standing
+    between a bad write and a year of meals, and it lives beside the
+    data rather than in the cloud on someone else's free tier."""
+    if h is None:
+        h = load_history()
+    if not h:
+        return None
+    try:
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y-%m-%d")
+        dest = BACKUP_DIR / f"history-{stamp}.json"
+        fd, tmp = tempfile.mkstemp(dir=BACKUP_DIR)
+        with os.fdopen(fd, "w") as f:
+            json.dump(h, f, indent=2)
+        os.replace(tmp, dest)
+    except Exception:
+        return None
+    # Trim quietly. Losing a prune is never worth interrupting a save.
+    try:
+        old = sorted(BACKUP_DIR.glob("history-*.json"))
+        for p in old[:-KEEP_BACKUPS]:
+            p.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return dest
+
+
 def save_history(h):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=DATA_DIR)
@@ -225,6 +262,11 @@ def save_history(h):
         with os.fdopen(fd, "w") as f:
             json.dump(h, f, indent=2)
         os.replace(tmp, HISTORY_FILE)
+        now = time.time()
+        global _last_backup
+        if now - _last_backup > 60:
+            _last_backup = now
+            backup_history(h)
     except Exception:
         try:
             os.unlink(tmp)

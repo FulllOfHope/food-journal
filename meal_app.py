@@ -143,6 +143,7 @@ def tray_main():
         items.append(pystray.Menu.SEPARATOR)
         items.append(pystray.MenuItem("Open GUI", lambda icon,item: subprocess.Popen([sys.executable, str(Path(__file__).parent/"meal_gui.py")])))
         items.append(pystray.MenuItem("View Analytics", lambda icon,item: show_analytics()))
+        items.append(pystray.MenuItem("Back up now", lambda icon,item: do_backup()))
         items.append(pystray.Menu.SEPARATOR)
         items.append(pystray.MenuItem("Quit", lambda icon,item: (app_state.update(running=False), icon.stop())))
         return pystray.Menu(*items)
@@ -152,8 +153,21 @@ def tray_main():
         icon.visible = True
     icon.run(setup=setup)
 
+def do_backup():
+    import meal_common as mc
+    dest = mc.backup_history()
+    if dest:
+        print(f"backed up -> {dest}")
+    else:
+        print("nothing to back up yet (no meals logged)")
+
+
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] in ("tray", "analytics", "remind", "gui"):
+    if len(sys.argv) > 1 and sys.argv[1] in ("tray", "analytics", "remind",
+                                             "gui", "backup"):
+        if sys.argv[1] == "backup":
+            do_backup()
+            return
         if sys.argv[1] == "tray":
             tray_main()
             return

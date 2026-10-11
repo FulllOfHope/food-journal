@@ -113,6 +113,7 @@ case "\$1" in
   watch)     exec python3 "\$APPDIR/meal_watcher.py" ;;
   remind)    exec python3 "\$APPDIR/meal_reminder.py" ;;
   analytics) exec python3 "\$APPDIR/meal_app.py" analytics ;;
+  backup)    exec python3 "\$APPDIR/meal_app.py" backup ;;
   *)         exec python3 "\$APPDIR/meal_gui.py" ;;
 esac
 EOF

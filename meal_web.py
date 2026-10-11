@@ -1,16 +1,27 @@
 #!/usr/bin/env python3
-"""Mess Ledger on your phone, over your own Wi-Fi. No cloud, no account,
-no personal server: run this on your laptop, open the printed URL on
-your phone's browser (same Wi-Fi), tap meals.
+"""Mess Ledger on your phone, over your own Wi-Fi.
 
-Same history file as the desktop app, so both stay in sync instantly.
+Installable: it is a PWA, so "Add to Home Screen" gives a standalone
+app with its own icon, no browser chrome, and an offline shell. The same
+history file as the desktop app, so a tap on the phone shows up on the
+laptop instantly and the other way round.
 
-Caveat, stated plainly: anyone on your Wi-Fi can open the page and tap.
-Fine for home; never expose this port to the internet.
+Guard: a shared token. Anyone who has the URL can open the page, so the
+token is generated once, stored with your data, and printed in the URL
+at startup. Everything else about the LAN is unchanged.
+
+Same caveat as ever: never expose this port to the internet. It speaks
+plain HTTP and expects to be reached only from your own network.
 """
+import hashlib
+import hmac
 import html
+import json
+import os
+import secrets
 import socket
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -19,49 +30,189 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import meal_common as mc
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8137
+WEB_DIR = Path(__file__).resolve().parent / "web"
+COOKIE = "ml_session"
+SESSION_MAX = 60 * 60 * 24 * 30  # 30 days
+
+TINT = "#b3402e"      # the one accent: stamp red
+PAPER = "#f4f1ea"
+
+
+def secret():
+    """A per-install token, created once, kept beside your history."""
+    mc.ensure_dirs()
+    path = mc.DATA_DIR / "lan_token"
+    try:
+        tok = path.read_text().strip()
+        if tok:
+            return tok
+    except OSError:
+        pass
+    tok = secrets.token_urlsafe(18)
+    try:
+        path.write_text(tok)
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return tok
+
+
+TOKEN = secret()
+
+
+def _hash(value):
+    return hmac.new(TOKEN.encode(), value.encode(), hashlib.sha256).hexdigest()
+
+
+def authorised(handler):
+    """Cookie first, so the URL can drop the key once it is set."""
+    raw = handler.headers.get("Cookie", "")
+    for part in raw.split(";"):
+        name, _, val = part.strip().partition("=")
+        if name == COOKIE and hmac.compare_digest(val, _hash("session")):
+            return True
+    return False
+
 
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mess Ledger &mdash; today</title>
+<meta name="viewport" content="width=device-width, initial-scale=1,
+  viewport-fit=cover">
+<title>Mess Ledger</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mess Ledger">
+<meta name="theme-color" content="__TINT__">
 <style>
-:root {{ color-scheme: light; }}
-* {{ box-sizing: border-box; }}
-body {{ margin: 0; background: #f4f1ea; color: #212121;
-  font-family: Georgia, 'DejaVu Serif', serif; }}
-.wrap {{ max-width: 520px; margin: 0 auto; padding: 28px 20px 40px; }}
-.eyebrow {{ font-family: monospace; font-size: 11px; letter-spacing: .12em;
-  color: #8a867e; text-transform: uppercase; }}
-h1 {{ font-size: 34px; font-weight: 500; margin: 6px 0 4px; }}
-.sub {{ font-family: monospace; font-size: 13px; color: #4a4843;
-  margin-bottom: 22px; }}
-.meal {{ display: block; width: 100%; margin: 0 0 14px; padding: 22px;
-  font-size: 20px; border-radius: 12px; cursor: pointer;
-  border: 1.5px solid #c0b797; background: #faf8f2; color: #212121; }}
-.meal small {{ display: block; font-family: monospace; font-size: 13px;
-  color: #4a4843; margin-top: 6px; }}
-.meal.eaten {{ background: #212121; border-color: #212121; color: #faf8f2; }}
-.meal.eaten small {{ color: #d1d1de; }}
-.meal:disabled {{ opacity: .45; cursor: default; }}
-.summary {{ margin-top: 20px; font-family: monospace; font-size: 13px;
-  color: #4a4843; line-height: 1.9; border-top: 1px solid #ddd5c2;
-  padding-top: 14px; }}
-.over {{ color: #b3402e; font-weight: bold; }}
-.foot {{ margin-top: 26px; font-family: monospace; font-size: 11px;
-  color: #8a867e; }}
-</style></head><body><div class="wrap">
-<div class="eyebrow">Mess Ledger &mdash; entry</div>
+:root {{ color-scheme: light; --tint: __TINT__; --ink: #212121;
+  --soft: #4a4843; --pencil: #8a867e; --rule: #ddd5c2;
+  --rule-dk: #c0b797; --card: #faf8f2; }}
+* {{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }}
+html, body {{ margin: 0; background: #f4f1ea; color: var(--ink);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    serif; }}
+body {{ padding: env(safe-area-inset-top) env(safe-area-inset-right)
+  env(safe-area-inset-bottom) env(safe-area-inset-left); }}
+.wrap {{ max-width: 460px; margin: 0 auto;
+  padding: 22px 18px calc(28px + env(safe-area-inset-bottom)); }}
+h1 {{ font-size: 30px; font-weight: 500; margin: 2px 0 6px;
+  letter-spacing: -.01em; }}
+.eyebrow, .sub, .foot, .small {{ font-family: ui-monospace, "DejaVu Sans Mono",
+  Menlo, Consolas, monospace; }}
+.eyebrow {{ font-size: 10px; letter-spacing: .16em; color: var(--pencil);
+  text-transform: uppercase; }}
+.sub {{ font-size: 13px; color: var(--soft); margin: 0 0 4px; }}
+.rule {{ height: 1px; background: var(--rule); margin: 16px 0 14px; }}
+.meal {{ display: block; width: 100%; margin: 0 0 12px; padding: 18px 18px;
+  font: inherit; font-size: 19px; text-align: left; border-radius: 3px;
+  cursor: pointer; border: 1.5px solid var(--rule-dk); background: var(--card);
+  color: var(--ink); transition: background .16s, border-color .16s; }}
+.meal:active {{ background: #f1ece0; }}
+.meal small {{ display: block; font-family: ui-monospace, "DejaVu Sans Mono",
+  Menlo, Consolas, monospace; font-size: 11.5px; color: var(--pencil);
+  margin-top: 5px; }}
+.meal.eaten {{ border-color: var(--tint); border-width: 2px;
+  background: #fdfaf5; }}
+.meal.eaten .lab {{ color: var(--tint); text-decoration: underline;
+  text-decoration-thickness: 1.5px; text-underline-offset: 4px; }}
+.meal:disabled {{ opacity: .42; cursor: default; }}
+.summary {{ font-family: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas,
+  monospace; font-size: 12px; color: var(--soft); line-height: 1.9; }}
+.foot {{ font-size: 10.5px; color: var(--pencil); margin-top: 26px;
+  padding-top: 12px; border-top: 1px solid var(--rule); line-height: 1.7; }}
+.over {{ color: var(--tint); font-weight: 700; }}
+.offline {{ display: none; background: #efe7d8; color: var(--soft);
+  font-family: ui-monospace, monospace; font-size: 11px; padding: 7px 10px;
+  border-radius: 3px; margin-bottom: 12px; }}
+.offline.show {{ display: block; }}
+</style></head>
+<body><div class="wrap">
+<div class="offline" id="offline">offline &mdash; showing the last copy</div>
 <h1>{date}</h1>
-<div class="sub">{summary}</div>
+<p class="sub">{summary}</p>
+<div class="rule"></div>
 {cards}
 <div class="summary">{stats}<br>{bill}</div>
-<div class="foot">Same journal as the desktop app. LAN only &mdash; never expose this port.</div>
-</div></body></html>"""
+<p class="foot">Same journal as the desktop app, over your own Wi-Fi.
+Add to your home screen to run it as an app.</p>
+</div>
+<script>
+if (!navigator.onLine) document.getElementById('offline').classList.add('show');
+addEventListener('online', () =>
+  document.getElementById('offline').classList.remove('show'));
+if ('serviceWorker' in navigator) addEventListener('load', () =>
+  navigator.serviceWorker.register('/sw.js'));
+</script>
+</body></html>"""
 
 CARD = """<form method="post" action="/toggle">
 <input type="hidden" name="meal" value="{meal}">
-<button class="meal{eaten}" type="submit"{disabled}>{label}
+<button class="meal{eaten}" type="submit"{disabled}><span class="lab">{label}</span>
 <small>{meta}</small></button></form>"""
+
+LOCKED = """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mess Ledger &mdash; locked</title>
+<style>body{{background:#f4f1ea;color:#212121;font-family:Georgia,serif;
+margin:0;padding:12vh 24px;text-align:center}}
+h1{{font-weight:500;font-size:22px}}p{{color:#8a867e;font-size:14px;
+line-height:1.7}}</style></head><body>
+<h1>Mess Ledger</h1>
+<p>This journal is locked to its owner.<br>
+Open the full link your laptop printed, once.</p>
+</body></html>"""
+
+MANIFEST = {
+    "name": "Mess Ledger",
+    "short_name": "Ledger",
+    "description": "Meal journal, on your own Wi-Fi",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": PAPER,
+    "theme_color": TINT,
+    "icons": [
+        {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
+        {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
+        {"src": "/icon-maskable-512.png", "sizes": "512x512",
+         "type": "image/png", "purpose": "maskable"},
+    ],
+}
+
+SW = """const CACHE = 'mess-ledger-v1';
+// '/' is deliberately absent: it is behind the token, so precaching it
+// would store the "locked" page and break the app offline for good.
+// It gets cached at runtime instead, on the first real load.
+const SHELL = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png',
+               '/icon-180.png', '/icon-maskable-512.png'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))
+    .then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(
+    keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    .then(() => self.clients.claim()));
+});
+
+// fresh data when the laptop is reachable; last known copy when it is not
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+  e.respondWith(
+    fetch(e.request).then(r => {
+      const copy = r.clone();
+      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      return r;
+    }).catch(() => caches.match(e.request)
+      .then(r => r || caches.match('/')))
+  );
+});
+"""
 
 
 def rupees(v):
@@ -92,73 +243,116 @@ def render():
             meta=meta, eaten=" eaten" if eaten else "",
             disabled=" disabled" if closed else ""))
     bill, _ = mc.day_bill(e, now)
+    offered = sum(mc.meal_value(m, now) for m in mc.MEALS)
     a = mc.allowance_status()
     over = a["over"] > 0
     stats = (f"Misses {a['missed']:g} / {a['allowed']:g}"
              + (f' &mdash; <span class="over">OVER BY {a["over"]:g}</span>'
                 if over else f" &middot; {a['remaining']:g} left"))
-    return PAGE.format(
+    cycle = mc.bill_between(mc.cycle_start(now), mc.cycle_end(now))
+    return PAGE.replace("__TINT__", TINT).format(
         date=html.escape(now.strftime("%A, %d %B %Y")),
-        summary=(f"Today &mdash; {e['meals_counted']:g} meals &middot; "
-                 f"{rupees(bill)}"),
+        summary=(f"{e['meals_counted']:g} meals / {offered:g} offered"
+                 f" &middot; {rupees(bill)}"),
         cards="\n".join(cards),
         stats=stats,
-        bill=f"Bill so far {rupees(mc.bill_between(mc.cycle_start(now), mc.cycle_end(now))['total'])}")
+        bill=f"Cycle bill {rupees(cycle['total'])}")
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MessLedger/1"
+    server_version = "MessLedger/2"
+    protocol_version = "HTTP/1.1"
 
     def log_message(self, *args):
         pass
 
-    def _send(self, body, code=200, ctype="text/html; charset=utf-8"):
-        data = body.encode()
+    def _send(self, body, code=200, ctype="text/html; charset=utf-8",
+              extra=None):
+        if isinstance(body, str):
+            body = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        for k, v in (extra or {}):
+            self.send_header(k, v)
         self.end_headers()
-        self.wfile.write(data)
+        self.wfile.write(body)
+
+    def _file(self, name, ctype):
+        p = WEB_DIR / name
+        if not p.is_file():
+            return self._send("not found", 404, "text/plain")
+        self._send(p.read_bytes(), 200, ctype)
 
     def do_GET(self):
-        if urlparse(self.path).path != "/":
-            return self._send("not found", 404, "text/plain")
+        route = urlparse(self.path)
+        if route.path == "/manifest.webmanifest":
+            return self._send(json.dumps(MANIFEST), 200,
+                              "application/manifest+json")
+        if route.path == "/sw.js":
+            return self._send(SW, 200, "application/javascript",
+                              [("Service-Worker-Allowed", "/")])
+        if route.path.startswith("/icon-"):
+            return self._file(route.path.lstrip("/"), "image/png")
+        if route.path == "/apple-touch-icon.png":
+            return self._file("icon-180.png", "image/png")
+        if route.path == "/favicon.ico":
+            return self._file("icon-192.png", "image/png")
+
+        key = (parse_qs(route.query).get("k") or [""])[0]
+        if hmac.compare_digest(key, TOKEN):
+            cookie = (f"{COOKIE}={_hash('session')}; Path=/; Max-Age="
+                      f"{SESSION_MAX}; SameSite=Lax")
+            self.send_response(302)
+            self.send_header("Set-Cookie", cookie)
+            self.send_header("Location", "/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if not authorised(self):
+            return self._send(LOCKED, 401)
         self._send(render())
 
     def do_POST(self):
+        if not authorised(self):
+            return self._send(LOCKED, 401)
         if urlparse(self.path).path != "/toggle":
             return self._send("not found", 404, "text/plain")
         try:
             length = int(self.headers.get("Content-Length", 0))
-        except ValueError:
-            length = 0
-        meal = parse_qs(self.rfile.read(length).decode()).get("meal", [""])[0]
-        if meal in mc.MEALS:
-            d = mc.today()
-            if not (meal == "dinner" and d.weekday() == 5):
-                e = mc.peek_day(d)
-                mc.toggle_meal(d, meal, not e.get(meal, False))
+            form = parse_qs(self.rfile.read(length).decode())
+            meal = (form.get("meal") or [""])[0]
+            if meal in mc.MEALS:
+                now = mc.today()
+                if not (meal == "dinner" and now.weekday() == 5):
+                    e = mc.peek_day(now)
+                    mc.toggle_meal(now, meal, not e.get(meal, False))
+        except Exception:
+            pass
         self.send_response(303)
         self.send_header("Location", "/")
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
 
 def lan_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("10.255.255.255", 1))
         return s.getsockname()[0]
     except Exception:
-        return "localhost"
+        return "127.0.0.1"
     finally:
-        try:
-            s.close()
-        except Exception:
-            pass
+        s.close()
 
 
 if __name__ == "__main__":
-    mc.ensure_dirs()
-    print(f"Mess Ledger on your phone:  http://{lan_ip()}:{PORT}/")
-    print("Same Wi-Fi, same journal. Ctrl-C to stop.")
+    ip = lan_ip()
+    print("Mess Ledger, on your own Wi-Fi")
+    print(f"  http://{ip}:{PORT}/?k={TOKEN}")
+    print()
+    print("Open that full link once on your phone, then use "
+          "'Add to Home Screen'.")
+    print("Keep it private: anyone with the link can log your meals.")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

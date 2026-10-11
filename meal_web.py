@@ -22,6 +22,7 @@ import secrets
 import socket
 import sys
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -86,68 +87,137 @@ PAGE = """<!doctype html>
 <meta name="apple-mobile-web-app-title" content="Mess Ledger">
 <meta name="theme-color" content="__TINT__">
 <style>
-:root {{ color-scheme: light; --tint: __TINT__; --ink: #212121;
+:root { color-scheme: light; --tint: __TINT__; --ink: #212121;
   --soft: #4a4843; --pencil: #8a867e; --rule: #ddd5c2;
-  --rule-dk: #c0b797; --card: #faf8f2; }}
-* {{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }}
-html, body {{ margin: 0; background: #f4f1ea; color: var(--ink);
+  --rule-dk: #c0b797; --card: #faf8f2; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: #f4f1ea; color: var(--ink);
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
-    serif; }}
-body {{ padding: env(safe-area-inset-top) env(safe-area-inset-right)
-  env(safe-area-inset-bottom) env(safe-area-inset-left); }}
-.wrap {{ max-width: 460px; margin: 0 auto;
-  padding: 22px 18px calc(28px + env(safe-area-inset-bottom)); }}
-h1 {{ font-size: 30px; font-weight: 500; margin: 2px 0 6px;
-  letter-spacing: -.01em; }}
-.eyebrow, .sub, .foot, .small {{ font-family: ui-monospace, "DejaVu Sans Mono",
-  Menlo, Consolas, monospace; }}
-.eyebrow {{ font-size: 10px; letter-spacing: .16em; color: var(--pencil);
-  text-transform: uppercase; }}
-.sub {{ font-size: 13px; color: var(--soft); margin: 0 0 4px; }}
-.rule {{ height: 1px; background: var(--rule); margin: 16px 0 14px; }}
-.meal {{ display: block; width: 100%; margin: 0 0 12px; padding: 18px 18px;
+    serif; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right)
+  env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.wrap { max-width: 460px; margin: 0 auto;
+  padding: 22px 18px calc(28px + env(safe-area-inset-bottom)); }
+h1 { font-size: 30px; font-weight: 500; margin: 2px 0 6px;
+  letter-spacing: -.01em; }
+.eyebrow, .sub, .foot, .small { font-family: ui-monospace, "DejaVu Sans Mono",
+  Menlo, Consolas, monospace; }
+.eyebrow { font-size: 10px; letter-spacing: .16em; color: var(--pencil);
+  text-transform: uppercase; }
+.sub { font-size: 13px; color: var(--soft); margin: 0 0 4px; }
+.rule { height: 1px; background: var(--rule); margin: 16px 0 14px; }
+.meal { display: block; width: 100%; margin: 0 0 12px; padding: 18px 18px;
   font: inherit; font-size: 19px; text-align: left; border-radius: 3px;
   cursor: pointer; border: 1.5px solid var(--rule-dk); background: var(--card);
-  color: var(--ink); transition: background .16s, border-color .16s; }}
-.meal:active {{ background: #f1ece0; }}
-.meal small {{ display: block; font-family: ui-monospace, "DejaVu Sans Mono",
+  color: var(--ink); transition: background .16s, border-color .16s; }
+.meal:active { background: #f1ece0; }
+.meal small { display: block; font-family: ui-monospace, "DejaVu Sans Mono",
   Menlo, Consolas, monospace; font-size: 11.5px; color: var(--pencil);
-  margin-top: 5px; }}
-.meal.eaten {{ border-color: var(--tint); border-width: 2px;
-  background: #fdfaf5; }}
-.meal.eaten .lab {{ color: var(--tint); text-decoration: underline;
-  text-decoration-thickness: 1.5px; text-underline-offset: 4px; }}
-.meal:disabled {{ opacity: .42; cursor: default; }}
-.summary {{ font-family: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas,
-  monospace; font-size: 12px; color: var(--soft); line-height: 1.9; }}
-.foot {{ font-size: 10.5px; color: var(--pencil); margin-top: 26px;
-  padding-top: 12px; border-top: 1px solid var(--rule); line-height: 1.7; }}
-.over {{ color: var(--tint); font-weight: 700; }}
-.offline {{ display: none; background: #efe7d8; color: var(--soft);
-  font-family: ui-monospace, monospace; font-size: 11px; padding: 7px 10px;
-  border-radius: 3px; margin-bottom: 12px; }}
-.offline.show {{ display: block; }}
+  margin-top: 5px; }
+.meal.eaten { border-color: var(--tint); border-width: 2px;
+  background: #fdfaf5; }
+.meal.eaten .lab { color: var(--tint); text-decoration: underline;
+  text-decoration-thickness: 1.5px; text-underline-offset: 4px; }
+.meal:disabled { opacity: .42; cursor: default; }
+.summary { font-family: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas,
+  monospace; font-size: 12px; color: var(--soft); line-height: 1.9; }
+.foot { font-size: 10.5px; color: var(--pencil); margin-top: 26px;
+  padding-top: 12px; border-top: 1px solid var(--rule); line-height: 1.7; }
+.over { color: var(--tint); font-weight: 700; }
+.sync { font-family: ui-monospace, monospace; font-size: 11px;
+  color: var(--pencil); margin: 0 0 14px; display: flex; gap: 8px;
+  align-items: baseline; }
+.sync .dot { width: 7px; height: 7px; border-radius: 50%;
+  background: var(--rule-dk); display: inline-block; }
+.sync.pending .dot { background: var(--tint); }
+.sync.pending { color: var(--tint); }
+.meal.saving { opacity: .6; }
 </style></head>
 <body><div class="wrap">
-<div class="offline" id="offline">offline &mdash; showing the last copy</div>
-<h1>{date}</h1>
-<p class="sub">{summary}</p>
+<div class="sync" id="sync"><span class="dot"></span><span id="synctxt">syncing</span></div>
+<h1>__DATE_FULL__</h1>
+<p class="sub">__SUMMARY__</p>
 <div class="rule"></div>
-{cards}
-<div class="summary">{stats}<br>{bill}</div>
+__CARDS__
+<div class="summary">__STATS__<br>__BILL__</div>
 <p class="foot">Same journal as the desktop app, over your own Wi-Fi.
 Add to your home screen to run it as an app.</p>
 </div>
 <script>
-if (!navigator.onLine) document.getElementById('offline').classList.add('show');
-addEventListener('online', () =>
-  document.getElementById('offline').classList.remove('show'));
-if ('serviceWorker' in navigator) addEventListener('load', () =>
-  navigator.serviceWorker.register('/sw.js'));
+const DATE = "__DATE__";
+const LS = "ml_state_v1", LQ = "ml_queue_v1";
+const $ = id => document.getElementById(id);
+
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; }
+                         catch (e) { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); }
+                         catch (e) {} };
+
+// Every tap is recorded here first and only then sent. The queue lives
+// in localStorage, so it survives the tab being closed, the phone
+// sleeping, or the laptop being switched off for days.
+function queueDelta(date, meal, value) {
+  const q = load(LQ, []);
+  q.push({ d: date, m: meal, v: value ? 1 : 0, t: Date.now() });
+  save(LQ, q);
+  paintSync();
+  flush();
+}
+
+let sending = false;
+async function flush() {
+  const q = load(LQ, []);
+  if (!q.length || sending) return;
+  if (!navigator.onLine) return;
+  sending = true; paintSync();
+  try {
+    const r = await fetch("/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deltas: q })
+    });
+    if (!r.ok) throw new Error("sync failed");
+    const out = await r.json();
+    save(LS, out.state);
+    save(LQ, []);                 // only cleared once the laptop confirms
+    document.querySelectorAll(".saving").forEach(e => e.classList.remove("saving"));
+  } catch (e) {
+    /* laptop unreachable: the queue stays put and goes again later */
+  } finally {
+    sending = false;
+    paintSync();
+  }
+}
+
+function paintSync() {
+  const n = load(LQ, []).length, el = $("sync");
+  el.classList.toggle("pending", n > 0);
+  $("synctxt").textContent = n
+    ? n + (n === 1 ? " meal waiting to sync" : " meals waiting to sync")
+    : "in sync with your laptop";
+}
+
+document.querySelectorAll("form").forEach(form => {
+  form.addEventListener("submit", ev => {
+    ev.preventDefault();
+    const btn = form.querySelector("button");
+    const meal = form.dataset.meal;
+    const on = !btn.classList.contains("eaten");
+    btn.classList.toggle("eaten", on);
+    btn.classList.add("saving");
+    queueDelta(DATE, meal, on);
+  });
+});
+
+addEventListener("online", flush);
+addEventListener("visibilitychange", () => { if (!document.hidden) flush(); });
+setInterval(flush, 20000);
+paintSync();
+flush();
 </script>
 </body></html>"""
 
-CARD = """<form method="post" action="/toggle">
+CARD = """<form method="post" action="/toggle" data-meal="{meal}">
 <input type="hidden" name="meal" value="{meal}">
 <button class="meal{eaten}" type="submit"{disabled}><span class="lab">{label}</span>
 <small>{meta}</small></button></form>"""
@@ -250,13 +320,18 @@ def render():
              + (f' &mdash; <span class="over">OVER BY {a["over"]:g}</span>'
                 if over else f" &middot; {a['remaining']:g} left"))
     cycle = mc.bill_between(mc.cycle_start(now), mc.cycle_end(now))
-    return PAGE.replace("__TINT__", TINT).format(
-        date=html.escape(now.strftime("%A, %d %B %Y")),
-        summary=(f"{e['meals_counted']:g} meals / {offered:g} offered"
-                 f" &middot; {rupees(bill)}"),
-        cards="\n".join(cards),
-        stats=stats,
-        bill=f"Cycle bill {rupees(cycle['total'])}")
+    page = PAGE
+    for token, value in (
+            ("__TINT__", TINT),
+            ("__DATE__", now.isoformat()),
+            ("__DATE_FULL__", html.escape(now.strftime("%A, %d %B %Y"))),
+            ("__SUMMARY__", f"{e['meals_counted']:g} meals / "
+                            f"{offered:g} offered &middot; {rupees(bill)}"),
+            ("__CARDS__", "\n".join(cards)),
+            ("__STATS__", stats),
+            ("__BILL__", f"Cycle bill {rupees(cycle['total'])}")):
+        page = page.replace(token, value)
+    return page
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -312,12 +387,50 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not authorised(self):
             return self._send(LOCKED, 401)
+        if route.path == "/state":
+            return self._send(json.dumps(self._state_json()), 200,
+                              "application/json")
         self._send(render())
+
+    def _state_json(self):
+        return {"now": mc.today().isoformat(), "history": mc.load_history()}
+
+    def _apply_deltas(self, deltas):
+        """Replay queued edits from the phone, oldest first.
+
+        Each delta is an absolute set for one meal on one day, not a
+        toggle, so replaying five days of offline edits can never invert
+        a meal the user already corrected on the laptop."""
+        applied = 0
+        for item in deltas[:5000]:
+            try:
+                day = datetime.strptime(item["d"], "%Y-%m-%d")
+                meal = item["m"]
+                if meal not in mc.MEALS:
+                    continue
+                if meal == "dinner" and day.weekday() == 5:
+                    continue           # closed, never a miss
+                mc.toggle_meal(day, meal, bool(item["v"]))
+                applied += 1
+            except Exception:
+                continue
+        return applied
 
     def do_POST(self):
         if not authorised(self):
             return self._send(LOCKED, 401)
-        if urlparse(self.path).path != "/toggle":
+        path = urlparse(self.path).path
+        if path == "/sync":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except Exception:
+                body = {}
+            applied = self._apply_deltas(body.get("deltas") or [])
+            return self._send(json.dumps(
+                {"applied": applied, "state": self._state_json()}),
+                200, "application/json")
+        if path != "/toggle":
             return self._send("not found", 404, "text/plain")
         try:
             length = int(self.headers.get("Content-Length", 0))

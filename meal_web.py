@@ -146,8 +146,28 @@ Add to your home screen to run it as an app.</p>
 </div>
 <script>window.__STATE__ = __STATE_JSON__;</script>
 <script>
+// The day this page was rendered. It decides which day is *shown*, and
+// nothing else - see todayISO() below.
 const DATE = "__DATE__";
 const LS = "ml_state_v1", LQ = "ml_queue_v1";
+
+// The day a meal was actually eaten. DATE is baked in when the server
+// renders the page, so tagging taps with it means a phone that has been
+// away from home keeps filing everything under the last day it could
+// reach the laptop. Compute it at tap time instead; local time, %Y-%m-%d
+// to match the server.
+const todayISO = () => {
+  const d = new Date();
+  return d.getFullYear() + "-" +
+         String(d.getMonth() + 1).padStart(2, "0") + "-" +
+         String(d.getDate()).padStart(2, "0");
+};
+
+// The phone logs the meal you are eating now, so it shows today - not
+// whatever day the page happened to be rendered on. If the page has
+// been sitting on a home screen for three days these would otherwise
+// disagree, and a tap would save to one day and appear on another.
+const VIEW = todayISO();
 const $ = id => document.getElementById(id);
 
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; }
@@ -176,13 +196,13 @@ function mealsOf(date) {
 // Saturday dinner is closed. That one fact is cheap to restate, and the
 // phone must not offer a meal the kitchen is not serving.
 function closed(meal) {
-  const d = new Date(DATE + "T00:00:00");
+  const d = new Date(VIEW + "T00:00:00");
   return meal === "dinner" && d.getDay() === 6;
 }
 
 function render() {
   if (!state) return;          // nothing mirrored yet: trust the server's own markup
-  const m = mealsOf(DATE);
+  const m = mealsOf(VIEW);
   document.querySelectorAll("form[data-meal]").forEach(form => {
     const meal = form.dataset.meal;
     const btn = form.querySelector("button");
@@ -213,9 +233,17 @@ function paintSync() {
 
 // --- push: your taps --------------------------------------------------
 function queueDelta(meal, value) {
+  const d = todayISO();
   const q = load(LQ, []);
-  q.push({ d: DATE, m: meal, v: value ? 1 : 0, t: Date.now() });
+  q.push({ d: d, m: meal, v: value ? 1 : 0, t: Date.now() });
   save(LQ, q);
+  // Show the tap at once. The laptop confirms later, and until it does
+  // the tile should reflect what you meant rather than pretending the
+  // tap did nothing - otherwise you tap it twice and log it twice.
+  const e = (state.history = state.history || {})[d] ||
+            (state.history[d] = { date: d, weekday: "", meals_counted: 0 });
+  e[meal] = !!value;
+  if (state.history) save(LS, state);
   render();
   paintSync();
   flush();
@@ -255,8 +283,8 @@ async function pull() {
 
 function adopt(next) {
   if (!next || !next.history) return;
-  const before = entryFor(DATE);
-  const after = next.history[DATE];
+  const before = entryFor(VIEW);
+  const after = next.history[VIEW];
   const changed = JSON.stringify(before || null) !==
                   JSON.stringify(after || null);
   state = next;

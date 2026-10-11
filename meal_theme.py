@@ -378,7 +378,7 @@ PAPER_RGB = (244, 241, 234)
 
 
 _CACHE_DIR = Path.home() / ".cache" / "mess-ledger" / "art"
-_ART_VERSION = 8  # bump whenever the art pipeline changes
+_ART_VERSION = 9  # bump whenever the art pipeline changes
 
 
 def _cache_path(key):
@@ -552,9 +552,14 @@ class PhotoBanner(tk.Canvas):
         w, h = self.winfo_width(), self.winfo_height()
         if w < 200 or h < 40:
             return
-        cx, cy = w - 96, h - 44
-        self.create_rectangle(cx - 70, cy - 17, cx + 70, cy + 17,
-                              outline=STAMP, width=2, tags="stamp")
+        cx, cy = w - 104, h - 40
+        # a paper label, so the date stays legible over any photograph:
+        # flat sky, busy foliage, it does not matter
+        self.create_rectangle(cx - 74, cy - 19, cx + 74, cy + 19,
+                              fill=CARD_HI, outline=STAMP, width=1.6,
+                              tags="stamp")
+        self.create_rectangle(cx - 70, cy - 15, cx + 70, cy + 15,
+                              outline=STAMP, width=0.8, tags="stamp")
         self.create_text(cx, cy, text=self._stamp_text, fill=STAMP, angle=-7,
                          font=mono(12), tags="stamp")
 

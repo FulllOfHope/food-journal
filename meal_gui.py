@@ -439,10 +439,10 @@ class MealApp(tk.Tk):
         th.double_rule(self.paper, pady=4)
 
         # -- full-bleed photographic mastheads, one per view
-        _sky = th.art("insights.jpg", "log.jpg", "bg.jpg")
+        _sky = th.art("banner.jpg", "insights.jpg", "log.jpg", "bg.jpg")
         self.banners = {
             name: th.PhotoBanner(self.paper, height=BAND_H, photo=_sky,
-                                 anchor=0.80)
+                                 anchor=0.20)
             for name in ("TODAY", "LOG / EDIT", "MONTH", "INSIGHTS")
         }
 

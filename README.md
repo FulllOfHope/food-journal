@@ -1,260 +1,322 @@
 # Mess Ledger
 
-A meal tracker styled as a bound paper journal. It nags you at login until
-the day's meals are logged.
+A meal journal that looks like paper.
 
-Four pages: **TODAY** (stamp the day), **LOG / EDIT** (any single day),
-**MONTH** (a month almanac) and **INSIGHTS** (cycle stats, what actually
-gets skipped, and the bill).
+Breakfast, lunch and dinner recorded as struck-through rows, ticked
+allowance cells, a fruiting tree and wandering doodles. Your history is
+one plain JSON file you can read, back up and move.
 
-## Rules
+Also serves itself to your phone over your own Wi-Fi, so logging a meal
+from the sofa doesn't mean walking to the laptop.
 
-- Breakfast = 0.5 meal
-- Lunch = 1.0 meal (Saturdays = 2.0, double)
-- Dinner = 1.0 meal (Saturdays = not offered, worth 0)
+---
 
 ## Install
 
-The app runs from `~/bhu_meal_tracker` with system Python. Needs `pystray`,
-`pillow`, `tkinter`, `zenity` and `notify-send`:
+You need **Python 3.9 or newer**. Nothing else is required — no root, no
+system packages, and your data never leaves the machine.
+
+### Linux
 
 ```bash
-sudo apt install -y python3-tk zenity
-pip install --user pystray pillow
+git clone https://github.com/FulllOfHope/food-journal.git
+cd food-journal
+./install.sh
 ```
 
-Optional system-wide install (`/opt` + `/usr/local/bin/bhu-meal-tracker`,
-with its own venv):
+### macOS
 
 ```bash
-cd ~/bhu_meal_tracker && ./install.sh
+git clone https://github.com/FulllOfHope/food-journal.git
+cd food-journal
+./install.sh
 ```
 
-## Building a standalone binary
+### Windows
+
+Git Bash or WSL, then the same two commands. (Tkinter ships with the
+official python.org installer — pick the *tcl/tk and IDLE* option.)
+
+### Install without launching
 
 ```bash
-pip install --user pyinstaller
-./build.sh            # -> dist/MessLedger, one file, no Python needed
-./build.sh --onedir   # faster startup, a folder instead
+./install.sh --no-launch
 ```
 
-Art and icons are bundled; settings, history and exports stay in the usual
-home directories so an upgrade never loses data.
+### Options
 
-## Keys
+```bash
+./install.sh --uninstall     # remove the app (your data is kept)
+./install.sh --help
+```
 
-| key | does |
+### What the installer does
+
+Everything lands under `~/.local` — no `sudo`, nothing outside your home:
+
+| | |
 | --- | --- |
-| `B` `L` `D` | toggle breakfast / lunch / dinner |
-| `Left` `Right` | previous or next day, or month on the almanac |
-| `/` | jump to a date (`11`, `11/10` or `2026-10-11`) |
-| `?` | key sheet |
-| `Esc` | close a sheet |
+| app | `~/.local/share/mess-ledger/` |
+| command | `~/.local/bin/mess-ledger` |
+| menu entry | `~/.local/share/applications/mess-ledger.desktop` |
+| fonts | `~/.local/share/fonts/meal-tracker/` |
 
-Click any cell in the MONTH almanac to jump straight to editing that day.
-Hovering a history row floats a card with that day's meals and bill.
+Afterwards:
+
+```bash
+mess-ledger            # open the journal
+mess-ledger phone      # serve it to your phone
+```
+
+If `mess-ledger: command not found`, add the folder to your PATH:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
+It appears in your application menu as **Mess Ledger**, and starts with
+your session (delete
+`~/.config/autostart/mess-ledger.desktop` to stop that).
+
+### The fonts matter
+
+The journal is typeset in Playfair Display, Outfit, DM Mono and Caveat.
+The installer copies them in. **Skip that step and the app still runs,
+but falls back to a plain bitmap font and stops looking like itself** —
+it warns you on startup when that happens. All four are SIL OFL 1.1
+(`fonts/OFL-*.txt`).
+
+### Pillow is optional
+
+Without Pillow the photographs, doodles and paper grain are replaced by
+flat colour. To get them back:
+
+```bash
+python3 -m pip install --user pillow
+```
+
+### Build a standalone binary
+
+One file that runs on a machine with no Python:
+
+```bash
+python3 -m pip install --user pyinstaller
+./build.sh
+./dist/MessLedger          # double-click it
+```
+
+`--onedir` builds a folder that starts faster. `--clean` removes
+`build/` and `dist/`.
+
+---
+
+## Your phone
+
+The phone page is a **PWA** — a web app that installs to your home
+screen and opens fullscreen with no browser bars. It talks only to your
+own laptop over your home Wi-Fi. There is no cloud, no account and no
+server anywhere but your machine.
+
+### On the laptop
+
+```bash
+mess-ledger phone          # or: python3 meal_web.py
+```
+
+It prints something like:
+
+```
+Mess Ledger is on your Wi-Fi
+
+  http://192.168.1.24:8137/?k=3f9a…
+
+  phone: same Wi-Fi network, open the link above
+  the key changes if you reinstall
+```
+
+Leave that terminal open.
+
+### On the phone
+
+**Both phones must be on the same Wi-Fi as the laptop.**
+
+<details>
+<summary><b>Android (Chrome)</b></summary>
+
+1. Open the link from your laptop in Chrome
+2. Menu (⋮) → **Add to Home screen** → **Install**
+3. Open **Mess Ledger** from your home screen
+4. Tap the tiles to log a meal
+5. Anything you tap while the laptop is off is queued and sent
+   automatically when it comes back
+
+</details>
+
+<details>
+<summary><b>iPhone (Safari)</b></summary>
+
+1. Open the link from your laptop in **Safari**
+2. Tap the **Share** button (square with an arrow)
+3. Scroll and tap **Add to Home Screen** → **Add**
+4. Open **Mess Ledger** from your home screen
+5. Tap the tiles to log a meal
+6. Queued entries sync automatically when the laptop returns
+
+</details>
+
+### What the sync does
+
+- Laptop → phone: whatever you log on the laptop appears on the phone
+- Phone → laptop: tapping a tile writes straight to the same journal
+- Laptop off: taps are queued on the phone and replayed when it returns
+- Replaying is safe — a meal never gets logged twice
+- The link's key is the password. Anyone who has it can log meals.
+
+### If the phone can't connect
+
+| Symptom | Cause |
+| --- | --- |
+| page won't load | different Wi-Fi — phones on mobile data can't reach a LAN address |
+| "invalid key" | reinstall, or copy the whole URL including `?k=` |
+| laptop IP changed | close and rerun `mess-ledger phone` for a new link |
+| not offered "Install" | iOS: use **Share → Add to Home Screen**, not a bookmark |
+
+Find your IP with `ip addr` (Linux) or `ipconfig getifaddr en0` (macOS).
+
+### Keep it private
+
+The server listens on your network, not the internet. But anyone with
+the link can use it — don't post it publicly, and don't port-forward
+it. On shared or café Wi-Fi, stop the server when you're done
+(`Ctrl-C`).
+
+---
+
+## Using it
+
+### The pages
+
+| Page | What it's for |
+| --- | --- |
+| **TODAY** | three rows, the allowance ring, your tree |
+| **LOG / EDIT** | revisit any past date, tick what you actually ate |
+| **MONTH** | one month at a time, previous and next |
+| **INSIGHTS** | cycle totals, the cost thread, per-meal breakdown |
+
+### Logging
+
+Click a meal to eat it, click again to undo. A ticked row is eaten, a
+struck row is missed, and both count toward the cycle.
+
+Missed meals aren't punished — a journal that shames you stops being
+truthful. The allowance is a plain running count.
+
+### Keyboard
+
+| Key | |
+| --- | --- |
+| `/` | jump to a date |
+| `?` | keyboard sheet |
+| `Esc` | close |
+| `←` `→` | previous / next month (on MONTH) |
+
+### Export
+
+**EXPORT** on the TODAY page writes CSV and JSON to
+`~/Documents/MessLedger` — one file per month, ready for a spreadsheet
+or a backup.
+
+### Settings
+
+**SETTINGS** edits prices, tax, allowance and reminder times. They're
+written to `~/.config/bhu_meal_tracker/config.ini`.
+
+### Photos
+
+Drop your own into `art/`:
+
+| | |
+| --- | --- |
+| `art/insights.jpg` | the masthead on every page |
+| `art/today.jpg` | header on TODAY |
+| `art/log.jpg` | header on LOG / EDIT |
+| `art/bg.jpg` | background paper |
+
+Squares crop from the centre, so keep faces out of the centre of a wide
+photo. Any `art/*.jpg` is also picked up as a possible sticker.
+
+---
 
 ## Your data
 
-Nothing leaves the machine. Two files matter:
+```text
+~/.local/share/bhu_meal_tracker/history.json   everything you've logged
+~/.config/bhu_meal_tracker/config.ini          your settings
+~/.cache/mess-ledger/art/                      generated artwork (safe to delete)
+```
 
-- `~/.local/share/bhu_meal_tracker/history.json` — every logged day
-- `~/.config/bhu_meal_tracker/config.ini` — prices, tax, miss allowance
+Hand-edit `history.json` and the app reads it on next start. Back it up
+by copying it. Nothing is stored anywhere else.
 
-**EXPORT** in the footer writes both a CSV and a JSON backup to
-`~/Documents/MessLedger`. Worth doing occasionally; it is the only copy
-if the machine goes away.
+To move to another machine: copy that file across.
 
-**SETTINGS** in the footer edits prices, tax percent, the miss allowance
-and the reminder timings, writing them straight back to `config.ini`.
+---
 
-## Usage
+## The rules
 
-- `bhu-meal-tracker gui` — the Mess Ledger journal GUI
-- `python3 ~/bhu_meal_tracker/meal_web.py` — phone companion (below)
-- `bhu-meal-tracker remind` — prompt once for today's meals
-- `bhu-meal-tracker analytics` — week/month/year summary
-- `bhu-meal-tracker tray` — system tray menu
-- `bhu-meal-tracker watch` — the nag loop (normally autostarted, see below)
+Deliberately small, and deliberately boring:
 
-## GUI
-
-Three views on dot-grid journal paper (stitched spine, margin rule):
-
-- **TODAY** — the day's entry: three sheets stamped EATEN / NOT EATEN
-  (click a sheet or press `B` / `L` / `D`). `MARK ALL EATEN` / `CLEAR`.
-  The masthead shows the date, a handwritten margin note, the page folio
-  and the cycle edition stamp.
-- **LOG / EDIT** — correct a past day with the same three sheets, stepping
-  with `< YESTERDAY` / `TOMORROW >` (or arrow keys). Below, the leaves of
-  the current cycle carry hand-drawn margin ticks; the cycle opening is
-  marked and earlier days are flagged `(Previous Cycle)`.
-- **INSIGHTS** — the 25-miss allowance box (X per miss, slash per half-miss,
-  red once over), the cycle bill split by batch, and meals entered per day
-  on graph paper.
-
-Saturday rules apply everywhere: lunch counts double and dinner is not
-offered, so the dinner sheet reads KITCHEN CLOSED and is inert.
-
-Keyboard: `B` / `L` / `D` stamps the meal on TODAY (or on the selected day
-in LOG / EDIT); `←` / `→` steps days in LOG / EDIT.
-
-## Billing
-
-| Meal | Base | +5% tax | Per serving |
-|------|-----:|--------:|------------:|
-| Breakfast | 27.61 | 1.38 | **28.99** |
-| Lunch | 50.48 | 2.52 | **53.00** |
-| Dinner | 50.48 | 2.52 | **53.00** |
-
-Tax is rounded per serving, then summed, so a day of all three meals comes to
-`134.99`. Billing uses *servings*, not meal credits: Saturday lunch is two
-servings (`106.00`) and Saturday dinner is none. Bill figures appear in the
-LOG day total, the history leaves, the TODAY summary, the INSIGHTS bill
-block, and `bhu-meal-tracker analytics`.
-
-## Billing cycle and batches
-
-The mess does **not** bill on calendar months. Its cycle runs from the **3rd of
-one month to the 2nd of the next**, and each cycle is billed as two batches:
-
-| Batch | Covers | Length |
-|-------|--------|--------|
-| 1 | 3rd – 17th | always 15 days |
-| 2 | 18th – 2nd | 13–16 days, so the batches always total the cycle |
-
-A cycle is exactly as long as the month it starts in, so February cycles are
-shorter. Every range that follows the cycle — the STATS ranges, the cycle bill
-panel, the allowance and `analytics` — uses these boundaries. The two batch
-bills always sum exactly to the cycle total.
-
-Note that days 1st and 2nd belong to the *previous* cycle, so at the start of a
-cycle the bill only covers what has elapsed.
-
-## Missed-meal allowance
-
-You may miss up to **25 meals per cycle**. The INSIGHTS allowance box shows
-misses struck so far and how many remain; overflow is stamped red, and the
-lines under it break the misses down per batch.
-
-Misses are counted in **meal credits**, not servings:
-
-| Meal | Credit |
+| | |
 | --- | --- |
-| Breakfast | 0.5 |
-| Lunch | 1.0 (2.0 on Saturday) |
-| Dinner | 1.0 (0.0 on Saturday — not served) |
+| breakfast | 0.5 portions |
+| lunch | 1 portion |
+| Saturday lunch | 2 portions |
+| Saturday dinner | closed |
+| allowance | 25 per cycle |
 
-So skipping breakfast alone costs half a miss, the allowance box draws that as
-a single slash, and the totals can be fractional such as `23.5 remaining`.
+The cycle runs from the 1st to the end of the month. Cost is computed
+from the settings and applied at the month edge; the app never bills
+you mid-month.
 
-Billing is separate and still charges whole servings, because that is what the
-mess actually serves you.
+---
 
-Only elapsed days count, and counting starts at your first recorded day, so
-installing mid-cycle does not count earlier days against you.
+## If something's wrong
 
-## Theme
+**The window is tiny and the text overlaps.** Resize it — the layout is
+responsive down to about 820px wide.
 
-`meal_theme.py` holds the journal system (paper/grain/dot-grid canvas,
-rubber stamps, the miss allowance, letterpress buttons) and `meal_charts.py`
-the canvas charts. Fonts are detected at startup, preferring Playfair
-Display (mastheads), Outfit (body), DM Mono (metadata) and Caveat (margin
-notes), falling back to installed serif/sans/mono families:
+**The fonts look wrong.** Fonts weren't installed: run
+`./install.sh --no-launch`.
 
-```bash
-# optional: journal fonts (all OFL), user-local install
-mkdir -p ~/.fonts/meal-tracker
-cd ~/.fonts/meal-tracker
-# Playfair Display / Outfit: static instances via fonttools from the
-# variable fonts at github.com/google/fonts (ofl/playfairdisplay,
-# ofl/outfit); DM Mono + Caveat ship static:
-#   ofl/dmmono/DMMono-{Light,Regular,Medium}.ttf
-#   fontsource latin-{500,600,700}-normal.ttf for Caveat
-fc-cache -f ~/.fonts
+**The banner is flat colour.** Pillow isn't installed: see above.
+
+**`No module named tkinter`.** Debian/Ubuntu:
+`sudo apt install python3-tk`.
+
+**The phone page 404s or won't install.** Rerun `mess-ledger phone` and
+open the *whole* URL, key included, in the phone's browser.
+
+**Nothing appears when I click a tile.** The phone is logged in as a
+different token — open your original link again.
+
+**Export is empty.** Exports are written for closed months. Try the
+current month from MONTH.
+
+---
+
+## Layout
+
+```text
+meal_gui.py     desktop app, the four pages
+meal_theme.py   paper, type, tally marks, tree, doodles, banner
+meal_common.py  the rules, the JSON store, config, export
+meal_web.py     the phone server
+meal_charts.py  the insights thread
+meal_app.py     tray icon
+meal_watcher.py turns the tray into a log prompt
+meal_reminder.py reminders
+fonts/          OFL typefaces, bundled on purpose
+art/            your photographs
 ```
 
-## Artwork
-
-## Artwork
-
-The masthead is `art/insights.jpg`, cropped rather than stretched so the
-whole width is filled with no distortion. It is deliberately left soft -
-the masthead was sharpened at one point and the painted foliage turned
-into hard cut-outs, which lost the calm the rest of the page is built on.
-
-
-Drop your photos in `art/` and they become the mastheads, blended warm
-with a baked scrim under cream type:
-
-| File | Used for |
-|------|----------|
-| `today.jpg` | TODAY banner (top crop) |
-| `log.jpg` | LOG / EDIT banner (centre crop) + TODAY polaroid |
-| `insights.jpg` | INSIGHTS banner (bottom crop) |
-| `bg.jpg` | fallback for any missing banner + faint whole-page wash |
-| `extra-*.jpg` | small gallery prints in TODAY's empty stretch |
-
-Headings sit on paper beneath the photos, never overlaid, and prints
-always show the full image. The two `extra-grove-*` postcards are
-public-domain finds (Florida, 1925 and Ormond Beach, c.1905) via
-Wikimedia Commons.
-
-JPG or PNG, landscape works best. Without them (or without Pillow) the
-banners fall back to plain paper and ink, and nothing else changes.
-
-## Reminders
-
-`~/.config/autostart/bhu-meal-tracker-reminder.desktop` runs `watch` at every
-graphical login. While any meal offered today is unticked, it reopens the log
-dialog every `poll_interval_minutes`. Once the day is complete it goes quiet.
-The loop holds a lock in `~/.local/share/bhu_meal_tracker/watcher.lock`, so a
-second copy exits instead of stacking dialogs. Activity is recorded in
-`watcher.log` next to it.
-
-## Config
-
-`~/.config/bhu_meal_tracker/config.ini`
-
-```ini
-[settings]
-remind_breakfast = true
-remind_lunch = true
-remind_dinner = true
-notification_timeout_seconds = 10
-poll_interval_minutes = 15
-nag_until = 23:30
-price_breakfast = 27.61
-price_lunch = 50.48
-price_dinner = 50.48
-tax_percent = 5
-allowed_misses_per_month = 25
-```
-
-Change `price_*` to update the bill everywhere, `tax_percent` to change the tax
-rate, and `allowed_misses_per_month` to change the allowance.
-
-`nag_until` stops the nagging overnight — past that time the watcher sleeps
-until 00:01 and resumes on the new day. Set a meal's `remind_*` to `false` to
-drop it from the prompt entirely (its value stays in the history).
-
-## Data
-
-Stored in `~/.local/share/bhu_meal_tracker/history.json`.
-
-## Phone (no cloud needed)
-
-The desktop app can't run on a phone, so `meal_web.py` serves a tiny
-touch page (stdlib only, no dependencies) with three big meal buttons
-reading and writing the same history file:
-
-```bash
-python3 ~/bhu_meal_tracker/meal_web.py
-# Mess Ledger on your phone:  http://192.168.1.5:8137/
-```
-
-Join your home Wi-Fi on the phone, open the printed URL, tap meals.
-Both stay in sync instantly because it is one file. Caveat, stated
-plainly: anyone on your Wi-Fi can open the page, so never expose the
-port beyond your local network. For away-from-home sync with no cloud
-account, pair this with Syncthing on the data directory.
+Licence: your data is yours. The bundled fonts are OFL 1.1.

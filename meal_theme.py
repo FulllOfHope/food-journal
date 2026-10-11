@@ -15,6 +15,7 @@ import os
 import random
 import tkinter as tk
 import tkinter.font as tkfont
+import sys
 from pathlib import Path
 from tkinter import ttk
 
@@ -24,7 +25,10 @@ try:
 except Exception:
     _PIL = False
 
-ART_DIR = Path(__file__).resolve().parent / "art"
+# Under PyInstaller the assets live in the extraction dir, not beside
+# the frozen module, so check for it explicitly.
+_BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+ART_DIR = _BASE_DIR / "art"
 
 
 def art(*names):
@@ -110,13 +114,29 @@ def _pick(candidates, fallbacks=()):
     return "TkFixedFont"
 
 
+fonts_installed = True
+
+
 def resolve_fonts():
-    """Pick the journal type system once, falling back gracefully."""
+    """Pick the journal type system once, falling back gracefully.
+
+    If nothing resolves we are almost certainly missing the bundled
+    fonts, which is worth saying out loud: the fallback is a bitmap
+    face and the app looks nothing like itself."""
     global _display_family, _body_family, _mono_family, _hand_family
+    global fonts_installed
     _display_family = _pick(_DISPLAY_CANDIDATES, ["TkFixedFont"])
     _body_family = _pick(_BODY_CANDIDATES, ["TkFixedFont"])
     _mono_family = _pick(_MONO_CANDIDATES, ["TkFixedFont"])
     _hand_family = _pick(_HAND_CANDIDATES, ["TkFixedFont"])
+    # Only True when we got the real journal faces. Falling back to any
+    # generic system font still looks wrong, so don't call that healthy.
+    fonts_installed = (
+        _display_family in _DISPLAY_CANDIDATES
+        and _body_family in _BODY_CANDIDATES
+        and _mono_family in _MONO_CANDIDATES
+        and _hand_family in _HAND_CANDIDATES
+    )
     return _display_family, _body_family, _mono_family, _hand_family
 
 

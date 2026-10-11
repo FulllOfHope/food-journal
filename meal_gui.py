@@ -1197,6 +1197,9 @@ class MealApp(tk.Tk):
         self.today_folio.configure(text=f"p. {day_no:02d}")
         self.banners["TODAY"].set_stamp(now.strftime("%d %b %Y").upper())
 
+        if not th.fonts_installed:
+            self.flash("journal fonts missing - run ./install.sh", bad=True,
+                       ms=20000)
         self.footer_left.configure(
             text=(f"Cycle {cs.strftime('%d %b')} \u2013 "
                   f"{ce.strftime('%d %b')}  \u00b7  "

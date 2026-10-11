@@ -31,7 +31,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import meal_common as mc
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8137
-WEB_DIR = Path(__file__).resolve().parent / "web"
+_BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+WEB_DIR = _BASE_DIR / "web"
 COOKIE = "ml_session"
 SESSION_MAX = 60 * 60 * 24 * 30  # 30 days
 

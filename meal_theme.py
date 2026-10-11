@@ -459,13 +459,11 @@ def band_fit(img, w, h, anchor=0.45, tear=True):
     """Fill a wide, short band with one photo, cropped rather than
     squashed, so the artwork keeps its proportions edge to edge.
 
-    The source is portrait and the band is wide and short, so it is
-    always upscaled and loses apparent bite. A light unsharp pass puts
-    the edges back after the resize rather than leaving a soft wash."""
+    Left soft on purpose. An unsharp pass was tried here to give the
+    resize some bite, and on this artwork it cut the foliage out into
+    hard shapes and fought the painted surface. A warm, calm band is
+    the point, so it is not sharpened."""
     band = cover_fit(img, w, h, anchor)
-    if band.width > img.width:
-        band = band.filter(ImageFilter.UnsharpMask(radius=1.8, percent=125,
-                                                  threshold=3))
     return deckle(band) if tear else band
 
 
@@ -552,14 +550,9 @@ class PhotoBanner(tk.Canvas):
         w, h = self.winfo_width(), self.winfo_height()
         if w < 200 or h < 40:
             return
-        cx, cy = w - 104, h - 40
-        # a paper label, so the date stays legible over any photograph:
-        # flat sky, busy foliage, it does not matter
-        self.create_rectangle(cx - 74, cy - 19, cx + 74, cy + 19,
-                              fill=CARD_HI, outline=STAMP, width=1.6,
-                              tags="stamp")
-        self.create_rectangle(cx - 70, cy - 15, cx + 70, cy + 15,
-                              outline=STAMP, width=0.8, tags="stamp")
+        cx, cy = w - 96, h - 44
+        self.create_rectangle(cx - 70, cy - 17, cx + 70, cy + 17,
+                              outline=STAMP, width=2, tags="stamp")
         self.create_text(cx, cy, text=self._stamp_text, fill=STAMP, angle=-7,
                          font=mono(12), tags="stamp")
 

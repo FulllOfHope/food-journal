@@ -176,15 +176,12 @@ fc-cache -f ~/.fonts
 
 ## Artwork
 
-`art/banner.jpg` is the masthead: *Orange-tree-1117423* from Wikimedia
-Commons, released CC0 (public domain, no attribution required). It is
-2400px wide, so the band is always downscaled and never has to invent
-detail. The other files in `art/` are the original illustrations; delete
-`banner.jpg` and the masthead falls back to `insights.jpg` on its own.
-
 ## Artwork
 
-See the note above for the masthead's licence.
+The masthead is `art/insights.jpg`, cropped rather than stretched so the
+whole width is filled with no distortion. It is deliberately left soft -
+the masthead was sharpened at one point and the painted foliage turned
+into hard cut-outs, which lost the calm the rest of the page is built on.
 
 
 Drop your photos in `art/` and they become the mastheads, blended warm

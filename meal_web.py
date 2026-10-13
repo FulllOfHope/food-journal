@@ -611,6 +611,17 @@ $("refresh").onclick = ev => { const i = ev.currentTarget;
   i.classList.add("spin"); setTimeout(() => i.classList.remove("spin"), 700);
   flush(); pull(); };
 
+// The service worker is the whole reason this can be opened with the
+// laptop shut. Without it the app is a web page on a machine that isn't
+// there, and every icon tap needs the server awake.
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js")
+      .then(reg => reg.update().catch(() => {}))
+      .catch(() => {});
+  });
+}
+
 renderAll();
 paintSync();
 flush(); pull();
@@ -663,15 +674,18 @@ MANIFEST = {
 }
 
 SW = """const CACHE = 'mess-ledger-v1';
-// '/' is deliberately absent: it is behind the token, so precaching it
-// would store the "locked" page and break the app offline for good.
-// It gets cached at runtime instead, on the first real load.
-const SHELL = ['/manifest.webmanifest', '/icon-192.png', '/icon-512.png',
+// '/' is behind the token. The browser sends the session cookie with
+// the service worker's own fetches, so it usually caches the real page -
+// but if it does not, install must still succeed. Promise.allSettled
+// keeps one 401 from throwing away the icons along with it.
+const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png',
                '/icon-180.png', '/icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))
-    .then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.allSettled(SHELL.map(u => c.add(u))))
+      .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {

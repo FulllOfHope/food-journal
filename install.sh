@@ -4,6 +4,7 @@
 #   ./install.sh              install and launch
 #   ./install.sh --no-launch  install only
 #   ./install.sh --uninstall  remove it again
+#   ./install.sh --autostart  open it at every login
 #
 # Everything lands under ~/.local so nothing outside your home is touched.
 set -euo pipefail
@@ -19,9 +20,12 @@ DESKTOP_FILE="$DESKTOP_DIR/mess-ledger.desktop"
 AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 LAUNCH=1
 MODE=install
+AUTOSTART=0
 
 case "${1:-}" in
   --no-launch) LAUNCH=0 ;;
+  --autostart) AUTOSTART=1 ;;
+  --no-autostart) AUTOSTART=0 ;;
   --uninstall) MODE=uninstall ;;
   -h|--help) sed -n '2,9p' "$0" | sed 's/^# //'; exit 0 ;;
   "") ;;
@@ -140,7 +144,10 @@ command -v update-desktop-database >/dev/null && \
   update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
 say "menu entry -> $DESKTOP_FILE"
 
-cat > "$AUTOSTART_DIR/mess-ledger.desktop" 2>/dev/null <<EOF
+# Opt-in only. Opening a journal window on every login was never asked
+# for, so it stays off unless someone passes --autostart.
+if [ "$AUTOSTART" = 1 ]; then
+  cat > "$AUTOSTART_DIR/mess-ledger.desktop" 2>/dev/null <<EOF
 [Desktop Entry]
 Type=Application
 Name=Mess Ledger
@@ -148,7 +155,11 @@ Exec=$DESKTOP_EXEC gui
 Icon=food-journal
 X-GNOME-Autostart-enabled=true
 EOF
-say "starts with your session"
+  say "will start with your session (--no-autostart to undo)"
+else
+  rm -f "$AUTOSTART_DIR/mess-ledger.desktop"
+  say "does not start with your session (use --autostart to change this)"
+fi
 
 case ":$PATH:" in
   *":$BINDIR:"*) ;;

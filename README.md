@@ -74,9 +74,15 @@ If `mess-ledger: command not found`, add the folder to your PATH:
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 ```
 
-It appears in your application menu as **Mess Ledger**, and starts with
-your session (delete
-`~/.config/autostart/mess-ledger.desktop` to stop that).
+It appears in your application menu as **Mess Ledger**.
+
+It does **not** open by itself at login — a journal window you didn't ask
+for is just an annoyance. If you want it to:
+
+```bash
+./install.sh --autostart          # start it every login
+rm ~/.config/autostart/mess-ledger.desktop   # or just undo it
+```
 
 ### The fonts matter
 

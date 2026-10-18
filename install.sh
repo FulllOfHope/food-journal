@@ -36,6 +36,14 @@ say() { printf '  %s\n' "$*"; }
 die() { printf '\nerror: %s\n' "$*" >&2; exit 1; }
 
 uninstall() {
+  # Work out where the fonts went before doing anything else; this used
+  # to be computed only on the install path, so --uninstall silently
+  # left them behind.
+  case "$(uname -s)" in
+    Darwin) FONTDIR="$HOME/Library/Fonts" ;;
+    MINGW*|MSYS*|CYGWIN*) FONTDIR="${LOCALAPPDATA:-$HOME/AppData/Local}/Microsoft/Windows/Fonts" ;;
+    *) FONTDIR="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/meal-tracker" ;;
+  esac
   say "removing $LAUNCHER"
   rm -f "$LAUNCHER" "$DESKTOP_FILE" "$AUTOSTART_DIR/mess-ledger.desktop"
   say "removing $APPDIR"
